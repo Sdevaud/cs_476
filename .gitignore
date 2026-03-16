@@ -10,3 +10,4 @@ work/
 or1kToolchain/
 *.mem
 *.cmem
+*.d
