@@ -319,7 +319,7 @@ module or1420SingleCore ( input wire         clock12MHz,
    * Here we instantiate the CPU
    *
    */
-  wire [31:0] s_cpu1CiResult;
+wire [31:0] s_cpu1CiResult, s_grayResult;
   wire [31:0] s_cpu1CiDataA, s_cpu1CiDataB, s_camCiResult, s_delayResult;
   wire [7:0]  s_cpu1CiN;
   wire        s_cpu1CiRa, s_cpu1CiRb, s_cpu1CiRc, s_cpu1CiStart, s_cpu1CiCke, s_cpu1CiDone, s_i2cCiDone, s_delayCiDone;
@@ -331,10 +331,10 @@ module or1420SingleCore ( input wire         clock12MHz,
   wire [3:0]  s_cpu1byteEnables;
   wire        s_cpu1DataValid;
   wire [7:0]  s_cpu1BurstSize;
-  wire        s_spm1Irq, s_stall;
+  wire        s_spm1Irq, s_stall, s_grayDone;
   
-  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_counterDone;
-  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_counterResult; 
+  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_counterDone | s_grayDone;
+  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_counterResult | s_grayResult; 
 
   or1420Top #( .NOP_INSTRUCTION(32'h1500FFFF)) cpu1
              (.cpuClock(s_systemClock),
@@ -676,6 +676,19 @@ module or1420SingleCore ( input wire         clock12MHz,
     .done(s_counterDone),
     .result(s_counterResult)
   );
+
+  
+  // ----------Add Gray scale--------------
+  rgb565GrayscaleIlse #(.customInstructionId(8'd10)) rgb565GrayscaleIlse
+          (.start(s_cpu1CiStart), 
+          .valueA(s_cpu1CiDataA),
+          .valueB(s_cpu1CiDataB),
+          .iseId(s_cpu1CiN),
+          .done(s_grayDone),
+          .result(s_grayResult)
+  );
+
+
 
 endmodule
 
