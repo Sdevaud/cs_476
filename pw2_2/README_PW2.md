@@ -22,17 +22,17 @@ This archive contains the code implementation for part 2 of the PW2. The followi
 
 - you can see here the performance for the code without the CI : 
 
-CPU-Cycles : 29 078 946
+CPU-Cycles : 29 129 333
 
-CPU-Stalls : 17 780 070
+CPU-Stalls : 17 756 326
 
-CPU-Idles  : 16 973 829
+CPU-Idles  : 16 754 135
 
 
 - and here with the CI : 
 
-CPU-Cycles : 8 210 132
+CPU-Cycles : 8 289 648
 
-CPU-Stalls : 6 753 470
+CPU-Stalls : 6 753 703
 
-CPU-Idles  : 3 789 062
+CPU-Idles  : 3 602 014

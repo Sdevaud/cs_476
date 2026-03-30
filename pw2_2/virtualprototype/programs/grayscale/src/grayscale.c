@@ -5,7 +5,7 @@
 
 // 1 -> use CI, 0 -> don't use CI
 #ifndef CI
-  #define CI 1
+  #define CI 0
 #endif
 
 // 1 -> use counters, 0 -> don't use counters
@@ -19,7 +19,7 @@ int main () {
   volatile uint16_t rgb565[640*480];
   volatile uint8_t grayscale[640*480];
   volatile uint32_t result, cycles,stall,idle;
-  volatile uint32_t control, counterid;
+  volatile uint32_t reset = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11);
   volatile unsigned int *vga = (unsigned int *) 0X50000020;
   camParameters camParams;
   vga_clear();
@@ -38,16 +38,19 @@ int main () {
   uint32_t grayPixels;
   vga[2] = swap_u32(2);
   vga[3] = swap_u32((uint32_t) &grayscale[0]);
+
+  #if COUNTERS
+    // Start counters
+    asm volatile ("l.nios_rrr r0,r0,%[in2],0xB"::[in2]"r"(7));
+  #endif
+  
   while(1) {
     uint32_t* gray = (uint32_t*) &grayscale[0];
     uint32_t* rgb = (uint32_t*) &rgb565[0];
     takeSingleImageBlocking((uint32_t) &rgb565[0]);
 
-    // Start counters
-    control = 7; // Enable all counters -> DataB = 1110 0000 0000
-
-    #if COUNTERS
-      asm volatile ("l.nios_rrr r0,r0,%[in2],0xB"::[in2]"r"(control));
+    #if COUNTERS 
+      asm volatile ("l.nios_rrr r0, r0, %[in2], 0xB": : [in2]"r"(reset));
     #endif
 
     #if CI
@@ -77,27 +80,25 @@ int main () {
     
     #if COUNTERS
       // Print Counter values
-      counterid = 0; // cpu cycles
+      // cpu cycles
       asm volatile ("l.nios_rrr %[out1], %[in1], r0, 0xB":[out1]"=r"(cycles):
-                                                          [in1]"r"(counterid));
+                                                          [in1]"r"(0));
+
+      // cpu stalls
+      asm volatile ("l.nios_rrr %[out1], %[in1], r0, 0xB":[out1]"=r"(stall):
+                                                          [in1]"r"(1));
+      // idle 
+      asm volatile ("l.nios_rrr %[out1], %[in1], r0, 0xB":[out1]"=r"(idle):
+                                                          [in1]"r"(2));
+
       printf("\n");
       printf("CPU-Cycles : %u\n", cycles);
-
-      counterid = 1; // cpu stalls
-      asm volatile ("l.nios_rrr %[out1], %[in1], r0, 0xB":[out1]"=r"(stall):
-                                                          [in1]"r"(counterid));
       printf("CPU-Stalls : %u\n", stall);
-
-      counterid = 2; // cpu bud idle
-      asm volatile ("l.nios_rrr %[out1], %[in1], r0, 0xB":[out1]"=r"(idle):
-                                                          [in1]"r"(counterid));
       printf("CPU-Idles  : %u\n", idle);
-
-      
     #endif
 
   }
   // Stop Counters
-  control = 7<<4; // Disable all counters -> DataB = 0000 1110 0000
-  asm volatile ("l.nios_rrr r0,r0,%[in2],0xB"::[in2]"r"(control));
+  // Disable all counters -> DataB = 0000 1110 0000
+  asm volatile ("l.nios_rrr r0,r0,%[in2],0xB"::[in2]"r"(7<<4));
 }
