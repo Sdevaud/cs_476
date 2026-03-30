@@ -677,8 +677,9 @@ wire [31:0] s_cpu1CiResult, s_grayResult;
     .result(s_counterResult)
   );
 
-  
-  // ----------Add Gray scale--------------
+  /*
+  Add Gray scale
+  */
   rgb565GrayscaleIlse #(.customInstructionId(8'h0A)) rgb565GrayscaleIlse
           (.start(s_cpu1CiStart), 
           .valueA(s_cpu1CiDataA),
@@ -687,8 +688,6 @@ wire [31:0] s_cpu1CiResult, s_grayResult;
           .done(s_grayDone),
           .result(s_grayResult)
   );
-
-
 
 endmodule
 
