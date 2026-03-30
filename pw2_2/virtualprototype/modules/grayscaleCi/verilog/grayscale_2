@@ -1,0 +1,39 @@
+module rgb565GrayscaleIlse_2 #(parameter [7:0] customInstructionId = 8'h0E)
+(
+    input  wire        start,
+    input  wire [31:0] valueA,
+    input  wire [31:0] valueB,
+    input  wire [7:0]  iseId,
+    output wire        done,
+    output wire [31:0] result
+);
+
+  wire execute = (customInstructionId == iseId) ? start : 1'b0;
+
+  function [7:0] rgb565_to_gray;
+    input [15:0] rgb;
+
+    reg [15:0] r8; 
+    reg [15:0] g8;
+    reg [15:0] b8;
+
+    begin
+      r8 = rgb[15:11] << 3; 
+      g8 = rgb[10:5] << 2;
+      b8 = rgb[4:0] << 3;
+
+      rgb565_to_gray = (r8*54 + g8*183 + b8*19) >> 8;
+
+
+    end
+  endfunction
+
+  wire [7:0] gray0 = rgb565_to_gray({valueA[7:0], valueA[15:8]});
+  wire [7:0] gray1 = rgb565_to_gray({valueA[23:16], valueA[31:24]});
+  wire [7:0] gray2 = rgb565_to_gray({valueB[7:0], valueB[15:8]});
+  wire [7:0] gray3 = rgb565_to_gray({valueB[23:16], valueB[31:24]});
+
+  assign result = execute ? {gray1, gray0, gray3, gray2} : 32'd0;
+  assign done   = execute;
+
+endmodule

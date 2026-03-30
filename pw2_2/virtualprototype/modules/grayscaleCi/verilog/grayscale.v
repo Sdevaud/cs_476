@@ -85,7 +85,6 @@ module rgb565GrayscaleIlse #(parameter [7:0] customInstructionId = 8'h0A)
   wire [7:0] gray2 = rgb565_to_gray({valueB[7:0], valueB[15:8]});
   wire [7:0] gray3 = rgb565_to_gray({valueB[23:16], valueB[31:24]});
 
-  // Même ordre que le corrigé
   assign result = execute ? {gray1, gray0, gray3, gray2} : 32'd0;
   assign done   = execute;
 

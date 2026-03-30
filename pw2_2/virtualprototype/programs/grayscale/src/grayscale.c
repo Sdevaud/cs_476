@@ -5,7 +5,7 @@
 
 // 1 -> use CI, 0 -> don't use CI
 #ifndef CI
-  #define CI 0
+  #define CI 1
 #endif
 
 // 1 -> use counters, 0 -> don't use counters

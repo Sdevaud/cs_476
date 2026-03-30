@@ -307252,7 +307252,7 @@
             "cell_src": "../verilog/or1420SingleCore.v:683.54-690.4",
             "module": "$paramod\\rgb565GrayscaleIlse\\customInstructionId=8'00001010",
             "module_hdlname": "rgb565GrayscaleIlse",
-            "module_src": "../../../modules/grayscaleCi/verilog/grayscale.v:1.1-92.10"
+            "module_src": "../../../modules/grayscaleCi/verilog/grayscale.v:1.1-91.10"
           },
           "port_directions": {
           },
