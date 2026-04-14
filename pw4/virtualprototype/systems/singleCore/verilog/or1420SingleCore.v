@@ -319,7 +319,7 @@ module or1420SingleCore ( input wire         clock12MHz,
    * Here we instantiate the CPU
    *
    */
-  wire [31:0] s_cpu1CiResult;
+  wire [31:0] s_cpu1CiResult, s_grayResult;
   wire [31:0] s_cpu1CiDataA, s_cpu1CiDataB, s_camCiResult, s_delayResult;
   wire [7:0]  s_cpu1CiN;
   wire        s_cpu1CiRa, s_cpu1CiRb, s_cpu1CiRc, s_cpu1CiStart, s_cpu1CiCke, s_cpu1CiDone, s_i2cCiDone, s_delayCiDone;
@@ -327,14 +327,14 @@ module or1420SingleCore ( input wire         clock12MHz,
   wire        s_cpu1IcacheRequestBus, s_cpu1DcacheRequestBus, s_camCiDone;
   wire        s_cpu1IcacheBusAccessGranted, s_cpu1DcacheBusAccessGranted;
   wire        s_cpu1BeginTransaction, s_cpu1EndTransaction, s_cpu1ReadNotWrite;
-  wire [31:0] s_cpu1AddressData, s_i2cCiResult;
+  wire [31:0] s_cpu1AddressData, s_i2cCiResult, s_profileResult;
   wire [3:0]  s_cpu1byteEnables;
   wire        s_cpu1DataValid;
   wire [7:0]  s_cpu1BurstSize;
-  wire        s_spm1Irq, s_stall;
+  wire        s_spm1Irq, s_grayDone, s_profileDone, s_stall;
   
-  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone;
-  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult; 
+  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_grayDone | s_profileDone;
+  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_grayResult | s_profileResult; 
 
   or1420Top #( .NOP_INSTRUCTION(32'h1500FFFF)) cpu1
              (.cpuClock(s_systemClock),
@@ -441,6 +441,35 @@ module or1420SingleCore ( input wire         clock12MHz,
              .ciDone(s_delayCiDone),
              .ciResult(s_delayResult));
 
+  /*
+   *
+   * An rgb to grayscale ISE
+   *
+   */
+  rgb565GrayscaleIse #(.customInstructionId(8'd10)) converter
+                      (.start(s_cpu1CiStart),
+                       .valueA(s_cpu1CiDataA),
+                       .valueB(s_cpu1CiDataB),
+                       .iseId(s_cpu1CiN),
+                       .done(s_grayDone),
+                       .result(s_grayResult) );
+
+  /*
+   *
+   * A profile ISE
+   *
+   */
+  profileCi #(.customId(8'd12)) profiler
+             (.start(s_cpu1CiStart),
+              .clock(s_systemClock),
+              .reset(s_cpuReset),
+              .stall(s_stall),
+              .busIdle(s_busIdle),
+              .valueA(s_cpu1CiDataA),
+              .valueB(s_cpu1CiDataB),
+              .ciN(s_cpu1CiN),
+              .done(s_profileDone),
+              .result(s_profileResult) );
   /*
    *
    * Here we define the camera interface

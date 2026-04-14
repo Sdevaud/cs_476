@@ -15,6 +15,10 @@ read -sv ../../../modules/spi/verilog/spiShiftQuad.v
 read -sv ../../../modules/spi/verilog/spiBus.v
 read -sv ../../../modules/i2c/verilog/i2cMaster.v
 read -sv ../../../modules/i2c/verilog/i2cCustomInstr.v
+read -sv ../../../modules/grayscaleCi/verilog/rgb565Grayscale.v
+read -sv ../../../modules/grayscaleCi/verilog/rgb565ISE.v
+read -sv ../../../modules/profileCi/verilog/counter.v
+read -sv ../../../modules/profileCi/verilog/profileCi.v
 read -sv ../../../modules/camera/verilog/camera.v
 read -sv ../../../modules/delay/verilog/delayIse.v
 read -sv ../../../modules/swapbyteIse/verilog/swapByteIse.v
