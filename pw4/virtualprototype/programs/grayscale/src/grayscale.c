@@ -6,10 +6,12 @@
 #define __WITH_CI
 
 int main () {
+  const uint8_t sevenSeg[10] = {0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
   volatile uint16_t rgb565[640*480];
   volatile uint8_t grayscale[640*480];
   volatile uint32_t result, cycles,stall,idle;
   volatile unsigned int *vga = (unsigned int *) 0X50000020;
+  volatile unsigned int *gpio = (unsigned int *) 0x40000000;
   camParameters camParams;
   vga_clear();
   
@@ -29,7 +31,12 @@ int main () {
   vga[3] = swap_u32((uint32_t) &grayscale[0]);
   while(1) {
     takeSingleImageBlocking((uint32_t) &rgb565[0]);
-    asm volatile ("l.nios_rrr r0,r0,%[in2],0xC"::[in2]"r"(7));
+    asm volatile ("l.nios_rrr r0,r0,%[in2],12"::[in2]"r"(7));
+    uint32_t dipswitch = swap_u32(gpio[0])^0xFF;
+    uint32_t hunderds = dipswitch/100;
+    uint32_t tens = (dipswitch%100)/10;
+    uint32_t ones = dipswitch%10;
+    gpio[0] = swap_u32((sevenSeg[hunderds] << 16) | (sevenSeg[tens] << 8) | sevenSeg[ones]);
 #ifdef __WITH_CI
       uint32_t * rgb = (uint32_t *) &rgb565[0];
       uint32_t * gray = (uint32_t *) &grayscale[0];
@@ -37,7 +44,11 @@ int main () {
         uint32_t pixel1 = rgb[pixel];
         uint32_t pixel2 = rgb[pixel+1];
         asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel1),[in2]"r"(pixel2));
-        gray[0] = grayPixels;
+        uint32_t newGrayPixel = (grayPixels&0xFF) > dipswitch ? 0xFF : 0x00;
+        newGrayPixel |= ((grayPixels >> 8)&0xFF) > dipswitch ? 0xFF00 : 0;
+        newGrayPixel |= ((grayPixels >> 16)&0xFF) > dipswitch ? 0xFF0000 : 0;
+        newGrayPixel |= ((grayPixels >> 24)&0xFF) > dipswitch ? 0xFF000000 : 0;
+        gray[0] = newGrayPixel;
         gray++;
       }
 #else

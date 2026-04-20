@@ -28,6 +28,9 @@ module or1420SingleCore ( input wire         clock12MHz,
                                              verticalSync,
                                              activePixel,
                           
+                          input wire [7:0]   nDipSwitch,
+                          output wire [2:0]  displaySelect,
+                          output wire [7:0]  nSegments,
 `ifdef GECKO5Education
                           output wire [4:0]  hdmiRed,
                                              hdmiBlue,
@@ -456,6 +459,42 @@ module or1420SingleCore ( input wire         clock12MHz,
 
   /*
    *
+   * Here the GPIO module is mapped
+   *
+   */
+  wire sGpioEndTransaction, sGpioDataValid, sGpioBusError;
+  wire [31:0] sGpioAddressData;
+  wire [23:0] sevenSegments;
+  
+  gpio #(.nrOfInputs(8),
+         .nrOfOutputs(24),
+         .Base(32'h40000000)) sevenSegDipSwitch
+        (.clock(s_systemClock),
+         .reset(s_cpuReset),
+         .externalInputs(nDipSwitch),
+         .externalOutputs(sevenSegments),
+         .beginTransactionIn(s_beginTransaction),
+         .endTransactionIn(s_endTransaction),
+         .readNotWriteIn(s_readNotWrite),
+         .dataValidIn(s_dataValid),
+         .busErrorIn(s_busError),
+         .busyIn(s_busy),
+         .addressDataIn(s_addressData),
+         .byteEnablesIn(s_byteEnables),
+         .burstSizeIn(s_burstSize),
+         .endTransactionOut(sGpioEndTransaction),
+         .dataValidOut(sGpioDataValid),
+         .busErrorOut(sGpioBusError),
+         .addressDataOut(sGpioAddressData));
+
+  sevenSegScanning scan7segs (.clock(s_systemClock),
+                              .reset(s_cpuReset),
+                              .threeDigits(sevenSegments),
+                              .digitSelect(displaySelect),
+                              .segmentSelect(nSegments));
+
+  /*
+   *
    * A profile ISE
    *
    */
@@ -677,16 +716,17 @@ module or1420SingleCore ( input wire         clock12MHz,
    * Here we define the bus architecture
    *
    */
- assign s_busError         = s_arbBusError | s_biosBusError | s_uartBusError | s_sdramBusError | s_flashBusError;
+ assign s_busError         = s_arbBusError | s_biosBusError | s_uartBusError | s_sdramBusError | s_flashBusError | sGpioBusError;
  assign s_beginTransaction = s_cpu1BeginTransaction | s_hdmiBeginTransaction | s_camBeginTransaction;
  assign s_endTransaction   = s_cpu1EndTransaction | s_arbEndTransaction | s_biosEndTransaction | s_uartEndTransaction |
-                             s_sdramEndTransaction | s_hdmiEndTransaction | s_flashEndTransaction | s_camEndTransaction;
+                             s_sdramEndTransaction | s_hdmiEndTransaction | s_flashEndTransaction | s_camEndTransaction |
+                             sGpioEndTransaction;
  assign s_addressData      = s_cpu1AddressData | s_biosAddressData | s_uartAddressData | s_sdramAddressData | s_hdmiAddressData |
-                             s_flashAddressData | s_camAddressData;
+                             s_flashAddressData | s_camAddressData | sGpioAddressData;
  assign s_byteEnables      = s_cpu1byteEnables | s_hdmiByteEnables | s_camByteEnables;
  assign s_readNotWrite     = s_cpu1ReadNotWrite | s_hdmiReadNotWrite;
  assign s_dataValid        = s_cpu1DataValid | s_biosDataValid | s_uartDataValid | s_sdramDataValid | s_hdmiDataValid | 
-                             s_flashDataValid | s_camDataValid;
+                             s_flashDataValid | s_camDataValid | sGpioDataValid;
  assign s_busy             = s_sdramBusy;
  assign s_burstSize        = s_cpu1BurstSize | s_hdmiBurstSize | s_camBurstSize;
  
