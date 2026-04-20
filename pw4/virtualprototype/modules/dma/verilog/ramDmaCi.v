@@ -16,6 +16,7 @@ module ramDmaCi #(parameter [7:0]customId=8'hA5)
   wire [8:0] addrA = valueA[8:0];
   reg [31:0] result_reg;
   wire ok = (start && ciN == customId);
+  wire test = 0;
 
   // Write, 1 cycle
   always @(posedge clock or posedge reset)
