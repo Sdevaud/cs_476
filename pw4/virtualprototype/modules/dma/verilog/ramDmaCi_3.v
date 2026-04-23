@@ -1,3 +1,7 @@
+/*
+Author : Devaud Sébastien 20.04.2026
+*/
+
 module ramDmaCi #(
   parameter [7:0] custom_id = 8'hA5
 )(
@@ -27,7 +31,9 @@ module ramDmaCi #(
   output reg  [3:0]  byte_enable_master,
   output reg         request_master,
   output reg         read_not_write_master,
-  output reg         begin_transaction_master
+  output reg         begin_transaction_master,
+  output reg         end_transaction_master,
+  output wire        data_valid_master
 );
 
   wire       ci_selected      = start && (ci_n == custom_id);
@@ -97,22 +103,28 @@ module ramDmaCi #(
   // state machine of the dma
   // =========================================================
 
-  localparam [2:0] IDLE             = 3'd0;
-  localparam [2:0] INIT_DMA        = 3'd1;
-  localparam [2:0] REQUEST_BUS      = 3'd2;
-  localparam [2:0] INIT_TRANSACTION = 3'd3;
-  localparam [2:0] READ             = 3'd4;
-  localparam [2:0] ERROR            = 3'd5;
+  localparam [3:0] IDLE                  = 4'd0;
+  localparam [3:0] INIT_DMA              = 4'd1;
+  localparam [3:0] REQUEST_BUS           = 4'd2;
+  localparam [3:0] INIT_TRANSACTION      = 4'd3;
+  localparam [3:0] READ                  = 4'd4;
+  localparam [3:0] ERROR                 = 4'd5;
+  localparam [3:0] WRITE                 = 4'd6;
+  localparam [3:0] END_TRANSACTION_ERROR = 4'd7;
+  localparam [3:0] END_WRITE_TRANSACTION = 4'd8;
 
-  wire request_slave = write_control && value_b[0];
+  wire request_slave_in  = write_control && value_b[0] && !value_b[1];
+  wire request_slave_out = write_control && !value_b[0] && value_b[1];
 
-  reg [2:0] current_state;
-  reg [2:0] next_state;
+  reg [3:0] current_state;
+  reg [3:0] next_state;
   reg       bus_error;
+  reg       is_read_burst;
 
   reg [31:0] dma_bus_start_iter;
   reg [8:0]  dma_mem_start_iter;
   reg [9:0]  dma_block_size_iter;
+  reg [8:0]  words_written;
 
   wire dma_busy = (current_state != IDLE);
 
@@ -123,25 +135,33 @@ module ramDmaCi #(
      data_valid_slave_reg);
 
   wire write_enable_b = (current_state == READ) && data_valid_slave_reg;
+  wire do_bus_write   = (current_state == WRITE) ? (!busy_slave && !words_written[8]) : 1'b0;
 
   wire [9:0] max_burst_size     = {2'd0, dma_burst_size_init} + 10'd1;
   wire [9:0] resting_block_size = dma_block_size_iter - 10'd1;
   wire [7:0] used_burst_size    = (dma_block_size_iter > max_burst_size) ? dma_burst_size_init
                                                                           : resting_block_size[7:0];
 
+  reg        data_valid_master_reg;
+  reg [31:0] address_data_master_reg;
+
+  assign data_valid_master = data_valid_master_reg;
+
+  // Perfrom the rotation with the State
   always @* begin
     next_state = current_state;
 
     request_master           = 1'b0;
     begin_transaction_master = 1'b0;
     read_not_write_master    = 1'b0;
+    end_transaction_master   = 1'b0;
     byte_enable_master       = 4'd0;
     burst_size_master        = 8'd0;
-    address_data_master      = 32'd0;
+    address_data_master      = address_data_master_reg;
 
     case (current_state)
       IDLE : begin
-        if (request_slave)
+        if (request_slave_in || request_slave_out)
           next_state = INIT_DMA;
       end
 
@@ -157,11 +177,11 @@ module ramDmaCi #(
 
       INIT_TRANSACTION : begin
         begin_transaction_master = 1'b1;
-        read_not_write_master    = 1'b1;
+        read_not_write_master    = is_read_burst;
         byte_enable_master       = 4'hF;
         burst_size_master        = used_burst_size;
         address_data_master      = {dma_bus_start_iter[31:2], 2'd0};
-        next_state               = READ;
+        next_state               = is_read_burst ? READ : WRITE;
       end
 
       READ : begin
@@ -178,36 +198,102 @@ module ramDmaCi #(
           next_state = IDLE;
       end
 
+      WRITE : begin
+        if (error_slave)
+          next_state = END_TRANSACTION_ERROR;
+        else if (words_written[8] && !busy_slave)
+          next_state = END_WRITE_TRANSACTION;
+      end
+
+      END_TRANSACTION_ERROR : begin
+        end_transaction_master = 1'b1;
+        next_state             = IDLE;
+      end
+
+      END_WRITE_TRANSACTION : begin
+        end_transaction_master = 1'b1;
+        if (dma_done)
+          next_state = IDLE;
+        else
+          next_state = REQUEST_BUS;
+      end
+
       default : begin
         next_state = IDLE;
       end
     endcase
   end
 
+  // State register: update current state from next_state
+  always @(posedge clock) begin
+    if (reset)
+      current_state <= IDLE;
+    else
+      current_state <= next_state;
+  end
+
+  // Read/Write mode register: latch the transfer direction
+  // (read from bus or write to bus) when DMA starts
+  always @(posedge clock) begin
+    if (reset)
+      is_read_burst <= 1'b0;
+    else if (current_state == IDLE)
+      is_read_burst <= request_slave_in;
+  end
+
+  // DMA core registers: handle error flag, address iteration,
+  // block size countdown, and write burst word counter
   always @(posedge clock) begin
     if (reset) begin
-      current_state       <= IDLE;
       bus_error           <= 1'b0;
       dma_bus_start_iter  <= 32'd0;
       dma_mem_start_iter  <= 9'd0;
       dma_block_size_iter <= 10'd0;
+      words_written       <= 9'd0;
     end else begin
-      current_state <= next_state;
-
       if (current_state == INIT_DMA) begin
+        bus_error           <= 1'b0;
         dma_bus_start_iter  <= dma_bus_start_init;
         dma_mem_start_iter  <= dma_mem_start_init;
         dma_block_size_iter <= dma_block_size_init;
-      end else if (write_enable_b) begin
-        dma_bus_start_iter  <= dma_bus_start_iter + 32'd4;
-        dma_mem_start_iter  <= dma_mem_start_iter + 9'd1;
-        dma_block_size_iter <= dma_block_size_iter - 10'd1;
+      end else begin
+        if (current_state == ERROR || current_state == END_TRANSACTION_ERROR)
+          bus_error <= 1'b1;
+
+        if (write_enable_b || do_bus_write) begin
+          dma_bus_start_iter  <= dma_bus_start_iter + 32'd4;
+          dma_mem_start_iter  <= dma_mem_start_iter + 9'd1;
+          dma_block_size_iter <= dma_block_size_iter - 10'd1;
+        end
       end
 
-      if (current_state == INIT_DMA)
-        bus_error <= 1'b0;
-      else if (current_state == ERROR)
-        bus_error <= 1'b1;
+      if (current_state == INIT_TRANSACTION)
+        words_written <= {1'b0, used_burst_size};
+      else if (do_bus_write)
+        words_written <= words_written - 9'd1;
+    end
+  end
+  
+  // Bus write data path: control outgoing data and valid signal
+  // during memory-to-bus transfers (write bursts)
+  always @(posedge clock) begin
+    if (reset) begin
+      address_data_master_reg <= 32'd0;
+      data_valid_master_reg   <= 1'b0;
+    end else begin
+      if (current_state == WRITE && busy_slave)
+        address_data_master_reg <= address_data_master_reg;
+      else if (do_bus_write)
+        address_data_master_reg <= bus_ram_data;
+      else if (current_state == INIT_TRANSACTION)
+        address_data_master_reg <= {dma_bus_start_iter[31:2], 2'd0};
+      else
+        address_data_master_reg <= 32'd0;
+
+      if (busy_slave && current_state == WRITE)
+        data_valid_master_reg <= data_valid_master_reg;
+      else
+        data_valid_master_reg <= do_bus_write;
     end
   end
 
@@ -216,6 +302,7 @@ module ramDmaCi #(
   // =========================================================
 
   wire [31:0] s_sramDataValue;
+  wire [31:0] bus_ram_data;
 
   dualPortSSRAM #( .bitwidth(32),
                    .nrOfEntries(512),
@@ -229,7 +316,7 @@ module ramDmaCi #(
                    .dataInA(value_b),
                    .dataInB(address_data_slave_reg),
                    .dataOutA(s_sramDataValue),
-                   .dataOutB());
+                   .dataOutB(bus_ram_data));
 
   // =========================================================
   // assign result
