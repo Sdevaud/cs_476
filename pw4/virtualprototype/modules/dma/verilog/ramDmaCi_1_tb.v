@@ -1,4 +1,9 @@
-`timescale 1ns/1ps
+/*
+Author : Till Beyer 14.04.2026
+*/
+
+
+`timescale 1ps/1ps
 
 module ramDmaCi_tb;
 
@@ -68,9 +73,9 @@ module ramDmaCi_tb;
 		repeat (2) @(posedge clock);
 
 		if (result !== expected) begin
-			$display("[TB][ERROR] addr=%0d expected=0x%08h got=0x%08h", addr, expected, result);
+			$display("ERROR  addr=%0d expected=0x%08h got=0x%08h", addr, expected, result);
 		end else begin
-			$display("[TB][OK]    addr=%0d value=0x%08h", addr, result);
+			$display("OK     addr=%0d value=0x%08h", addr, result);
 		end
 	end
 	endtask
@@ -93,7 +98,7 @@ module ramDmaCi_tb;
 		ciN = 8'h00;
 		#1;
 		if (done !== 1'b0) begin
-			$display("[TB][ERROR] done asserted for wrong custom instruction ID");
+			$display("ERROR  done even though wrong custom instruction ID");
 		end
 
 		@(negedge clock);
