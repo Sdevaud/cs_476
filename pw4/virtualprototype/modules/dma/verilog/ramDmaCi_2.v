@@ -36,10 +36,10 @@ module ramDmaCi #(
   wire [8:0] ci_mem_addr      = value_a[8:0];
   wire       ci_mem_space     = (value_a[31:10] == 22'd0);
 
-  wire write_mem_data = ci_selected && ci_mem_space &&  ci_write_or_read;
+  wire write_mem_data = ci_selected && ci_mem_space && ci_write_or_read;
   wire read_mem_data  = ci_selected && !ci_write_or_read;
 
-  reg read_mem_data_reg;
+  reg read_mem_data_reg; // shadow read_mem_data wire
 
   always @(posedge clock) begin
     if (reset)

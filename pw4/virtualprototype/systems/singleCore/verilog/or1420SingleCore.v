@@ -322,12 +322,12 @@ module or1420SingleCore ( input wire         clock12MHz,
    * Here we instantiate the CPU
    *
    */
-  wire [31:0] s_cpu1CiResult, s_grayResult;
+  wire [31:0] s_cpu1CiResult, s_grayResult, s_ramDmaResult;
   wire [31:0] s_cpu1CiDataA, s_cpu1CiDataB, s_camCiResult, s_delayResult;
   wire [7:0]  s_cpu1CiN;
   wire        s_cpu1CiRa, s_cpu1CiRb, s_cpu1CiRc, s_cpu1CiStart, s_cpu1CiCke, s_cpu1CiDone, s_i2cCiDone, s_delayCiDone;
   wire [4:0]  s_cpu1CiA, s_cpu1CiB, s_cpu1CiC;
-  wire        s_cpu1IcacheRequestBus, s_cpu1DcacheRequestBus, s_camCiDone;
+  wire        s_cpu1IcacheRequestBus, s_cpu1DcacheRequestBus, s_camCiDone, s_ramDmaDone;
   wire        s_cpu1IcacheBusAccessGranted, s_cpu1DcacheBusAccessGranted;
   wire        s_cpu1BeginTransaction, s_cpu1EndTransaction, s_cpu1ReadNotWrite;
   wire [31:0] s_cpu1AddressData, s_i2cCiResult, s_profileResult;
@@ -336,8 +336,10 @@ module or1420SingleCore ( input wire         clock12MHz,
   wire [7:0]  s_cpu1BurstSize;
   wire        s_spm1Irq, s_grayDone, s_profileDone, s_stall;
   
-  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_grayDone | s_profileDone;
-  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_grayResult | s_profileResult; 
+  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_grayDone | s_profileDone |
+                        s_ramDmaDone;
+  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_grayResult |  
+                          s_profileResult | s_ramDmaResult; 
 
   or1420Top #( .NOP_INSTRUCTION(32'h1500FFFF)) cpu1
              (.cpuClock(s_systemClock),
@@ -456,6 +458,41 @@ module or1420SingleCore ( input wire         clock12MHz,
                        .iseId(s_cpu1CiN),
                        .done(s_grayDone),
                        .result(s_grayResult) );
+
+  /*
+   *
+   * The RAM-DMA ISE
+   *
+   */
+  wire s_ramDmaRequest, s_ramDmaGranted, s_ramDmaBeginTransaction, s_ramDmaReadNotWrite;
+  wire s_ramDmaEndTransaction, s_ramDmaDataValid;
+  wire [3:0] s_ramDmaByteEnables;
+  wire [7:0] s_ramDmaBurstSize;
+  wire [31:0] s_ramDmaAddressData;
+  
+  ramDmaCi #(.customId(8'd20) ) ramDma
+            (.start(s_cpu1CiStart),
+             .clock(s_systemClock),
+             .reset(s_cpuReset),
+             .valueA(s_cpu1CiDataA),
+             .valueB(s_cpu1CiDataB),
+             .ciN(s_cpu1CiN),
+             .done(s_ramDmaDone),
+             .result(s_ramDmaResult),
+             .requestTransaction(s_ramDmaRequest),
+             .transactionGranted(s_ramDmaGranted),
+             .endTransactionIn(s_endTransaction),
+             .dataValidIn(s_dataValid),
+             .busErrorIn(s_busError),
+             .busyIn(s_busy),
+             .addressDataIn(s_addressData),
+             .beginTransactionOut(s_ramDmaBeginTransaction),
+             .readNotWriteOut(s_ramDmaReadNotWrite),
+             .endTransactionOut(s_ramDmaEndTransaction),
+             .dataValidOut(s_ramDmaDataValid),
+             .byteEnablesOut(s_ramDmaByteEnables),
+             .burstSizeOut(s_ramDmaBurstSize),
+             .addressDataOut(s_ramDmaAddressData));
 
   /*
    *
@@ -690,12 +727,14 @@ module or1420SingleCore ( input wire         clock12MHz,
  assign s_busRequests[30] = s_cpu1IcacheRequestBus;
  assign s_busRequests[29] = s_hdmiRequestBus;
  assign s_busRequests[28] = s_camReqBus;
- assign s_busRequests[27:0] = 28'd0;
+ assign s_busRequests[27] = s_ramDmaRequest;
+ assign s_busRequests[26:0] = 27'd0;
  
  assign s_cpu1DcacheBusAccessGranted = s_busGrants[31];
  assign s_cpu1IcacheBusAccessGranted = s_busGrants[30];
  assign s_hdmiBusgranted             = s_busGrants[29];
  assign s_camAckBus                  = s_busGrants[28];
+ assign s_ramDmaGranted              = s_busGrants[27];
 
  busArbiter arbiter ( .clock(s_systemClock),
                       .reset(s_reset),
@@ -717,17 +756,17 @@ module or1420SingleCore ( input wire         clock12MHz,
    *
    */
  assign s_busError         = s_arbBusError | s_biosBusError | s_uartBusError | s_sdramBusError | s_flashBusError | sGpioBusError;
- assign s_beginTransaction = s_cpu1BeginTransaction | s_hdmiBeginTransaction | s_camBeginTransaction;
+ assign s_beginTransaction = s_cpu1BeginTransaction | s_hdmiBeginTransaction | s_camBeginTransaction| s_ramDmaBeginTransaction;
  assign s_endTransaction   = s_cpu1EndTransaction | s_arbEndTransaction | s_biosEndTransaction | s_uartEndTransaction |
                              s_sdramEndTransaction | s_hdmiEndTransaction | s_flashEndTransaction | s_camEndTransaction |
-                             sGpioEndTransaction;
+                             sGpioEndTransaction | s_ramDmaEndTransaction;
  assign s_addressData      = s_cpu1AddressData | s_biosAddressData | s_uartAddressData | s_sdramAddressData | s_hdmiAddressData |
-                             s_flashAddressData | s_camAddressData | sGpioAddressData;
- assign s_byteEnables      = s_cpu1byteEnables | s_hdmiByteEnables | s_camByteEnables;
- assign s_readNotWrite     = s_cpu1ReadNotWrite | s_hdmiReadNotWrite;
+                             s_flashAddressData | s_camAddressData | sGpioAddressData | s_ramDmaAddressData;
+ assign s_byteEnables      = s_cpu1byteEnables | s_hdmiByteEnables | s_camByteEnables | s_ramDmaByteEnables;
+ assign s_readNotWrite     = s_cpu1ReadNotWrite | s_hdmiReadNotWrite | s_ramDmaReadNotWrite;
  assign s_dataValid        = s_cpu1DataValid | s_biosDataValid | s_uartDataValid | s_sdramDataValid | s_hdmiDataValid | 
-                             s_flashDataValid | s_camDataValid | sGpioDataValid;
+                             s_flashDataValid | s_camDataValid | sGpioDataValid | s_ramDmaDataValid;
  assign s_busy             = s_sdramBusy;
- assign s_burstSize        = s_cpu1BurstSize | s_hdmiBurstSize | s_camBurstSize;
+ assign s_burstSize        = s_cpu1BurstSize | s_hdmiBurstSize | s_camBurstSize | s_ramDmaBurstSize;
  
 endmodule

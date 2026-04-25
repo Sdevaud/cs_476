@@ -232,7 +232,7 @@ module ramDmaCi #(
       current_state <= next_state;
   end
 
-  // Read/Write mode register: latch the transfer direction
+  // Read/Write mode register: keep the transfer direction
   // (read from bus or write to bus) when DMA starts
   always @(posedge clock) begin
     if (reset)
@@ -241,10 +241,10 @@ module ramDmaCi #(
       is_read_burst <= request_slave_in;
   end
 
-  // DMA core registers: handle error flag, address iteration,
+  // DMA registers: error flag, address iteration,
   // block size countdown, and write burst word counter
   always @(posedge clock) begin
-    if (reset) begin
+    if (reset) begin[31:2],2'd0
       bus_error           <= 1'b0;
       dma_bus_start_iter  <= 32'd0;
       dma_mem_start_iter  <= 9'd0;
