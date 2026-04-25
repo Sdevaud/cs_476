@@ -6,35 +6,26 @@ Author : Till Beyer 25.04.2026
 #include <stdio.h>
 
 #define CI_ADDR 0xA5
-
-void writeCiMemory(uint32_t address, uint32_t data) {
-  uint32_t writeOperation= 1<<9;
-  asm volatile("l.nios_rrr r0,%[in1],%[in2],%[id]" ::[in1] "r"(address | writeOperation), [in2]"r"(data), [id] "r"(CI_ADDR));
-}
-
-void readCiMemory(uint32_t address, uint32_t *data) {
-  asm volatile("l.nios_rrr %[out1],%[in1],r0,%[id]" :[out1]"=r"(*data):[in1] "r"(address), [id] "r"(CI_ADDR));
-}
+#define WRITE_OPERATION 1<<9
 
 int main() {
-
   uint32_t ramAddress, ramData;
   printf("Writing\n");
   for (ramAddress = 0; ramAddress < 512; ramAddress++) {
-    writeCiMemory(ramAddress, 0);
+    asm volatile("l.nios_rrr r0,%[in1],r0,165" ::[in1] "r"(ramAddress | WRITE_OPERATION)); // we clear the memory
   }
   printf("Comparing\n");
   for (ramAddress = 0; ramAddress < 512; ramAddress++) {
-    readCiMemory(ramAddress, &ramData);
+    asm volatile("l.nios_rrr %[out1],%[in1],r0,165" :[out1]"=r"(ramData):[in1] "r"(ramAddress)); // we control that the memory is empty
     if (ramData != 0) printf("Error at address 0x%03X : 0x%08X\n", ramAddress, ramData);
   }
   printf("Writing\n");
   for (ramAddress = 0; ramAddress < 512; ramAddress++) {
-    writeCiMemory(ramAddress, ramAddress ^ 0xFFFFFF);
+    asm volatile("l.nios_rrr r0,%[in1],%[in2],165" ::[in1] "r"(ramAddress | WRITE_OPERATION), [in2]"r"(ramAddress ^ 0xFFFFFF)); // we fill the memory
   }
   printf("Comparing\n");
   for (ramAddress = 0; ramAddress < 512; ramAddress++) {
-    readCiMemory(ramAddress, &ramData);
+    asm volatile("l.nios_rrr %[out1],%[in1],r0,165" :[out1]"=r"(ramData):[in1] "r"(ramAddress)); // we control that the memory is correct
     if (ramData != (ramAddress ^ 0xFFFFFF)) printf("Error at address 0x%03X : 0x%08X\n", ramAddress, ramData);
   }
 }
