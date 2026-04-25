@@ -244,7 +244,7 @@ module ramDmaCi #(
   // DMA registers: error flag, address iteration,
   // block size countdown, and write burst word counter
   always @(posedge clock) begin
-    if (reset) begin[31:2],2'd0
+    if (reset) begin
       bus_error           <= 1'b0;
       dma_bus_start_iter  <= 32'd0;
       dma_mem_start_iter  <= 9'd0;

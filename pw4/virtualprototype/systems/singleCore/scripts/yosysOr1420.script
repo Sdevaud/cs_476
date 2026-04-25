@@ -21,6 +21,8 @@ read -sv ../../../modules/grayscaleCi/verilog/rgb565Grayscale.v
 read -sv ../../../modules/grayscaleCi/verilog/rgb565ISE.v
 read -sv ../../../modules/profileCi/verilog/counter.v
 read -sv ../../../modules/profileCi/verilog/profileCi.v
+read -sv ../../../modules/dma/verilog/ramDmaCi_3.v
+read -sv ../../../modules/dma/verilog/dual_ported.v
 read -sv ../../../modules/camera/verilog/camera.v
 read -sv ../../../modules/delay/verilog/delayIse.v
 read -sv ../../../modules/swapbyteIse/verilog/swapByteIse.v

@@ -11,3 +11,4 @@ or1kToolchain/
 *.mem
 *.cmem
 *.d
+pw4/virtualprototype/systems/singleCore/scripts/synthesizeOr1420.sh

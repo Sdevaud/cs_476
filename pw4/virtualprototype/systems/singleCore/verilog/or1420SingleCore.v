@@ -470,29 +470,29 @@ module or1420SingleCore ( input wire         clock12MHz,
   wire [7:0] s_ramDmaBurstSize;
   wire [31:0] s_ramDmaAddressData;
   
-  ramDmaCi #(.customId(8'd20) ) ramDma
+  ramDmaCi #(.custom_id(8'hA5) ) ramDma
             (.start(s_cpu1CiStart),
              .clock(s_systemClock),
              .reset(s_cpuReset),
-             .valueA(s_cpu1CiDataA),
-             .valueB(s_cpu1CiDataB),
-             .ciN(s_cpu1CiN),
+             .value_a(s_cpu1CiDataA),
+             .value_b(s_cpu1CiDataB),
+             .ci_n(s_cpu1CiN),
              .done(s_ramDmaDone),
              .result(s_ramDmaResult),
-             .requestTransaction(s_ramDmaRequest),
-             .transactionGranted(s_ramDmaGranted),
-             .endTransactionIn(s_endTransaction),
-             .dataValidIn(s_dataValid),
-             .busErrorIn(s_busError),
-             .busyIn(s_busy),
-             .addressDataIn(s_addressData),
-             .beginTransactionOut(s_ramDmaBeginTransaction),
-             .readNotWriteOut(s_ramDmaReadNotWrite),
-             .endTransactionOut(s_ramDmaEndTransaction),
-             .dataValidOut(s_ramDmaDataValid),
-             .byteEnablesOut(s_ramDmaByteEnables),
-             .burstSizeOut(s_ramDmaBurstSize),
-             .addressDataOut(s_ramDmaAddressData));
+             .request_master(s_ramDmaRequest),
+             .grant_arbiter(s_ramDmaGranted),
+             .end_transaction_slave(s_endTransaction),
+             .data_valid_slave(s_dataValid),
+             .error_slave(s_busError),
+             .busy_slave(s_busy),
+             .address_data_slave(s_addressData),
+             .begin_transaction_master(s_ramDmaBeginTransaction),
+             .read_not_write_master(s_ramDmaReadNotWrite),
+             .end_transaction_master(s_ramDmaEndTransaction),
+             .data_valid_master(s_ramDmaDataValid),
+             .byte_enable_master(s_ramDmaByteEnables),
+             .burst_size_master(s_ramDmaBurstSize),
+             .address_data_master(s_ramDmaAddressData));
 
   /*
    *
