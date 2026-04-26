@@ -19,12 +19,12 @@ module ramDmaCi #(parameter [7:0]customId=8'hA5)
   wire [8:0] addrA = valueA[8:0];
   wire [31:0] dataInterface = valueB;
   reg [31:0] result_reg;
-  wire ok = (start && ciN == customId);
+  wire ok = start && (ciN == customId);
 
   dualPortSSRAM #(.bitwidth(32), .nrOfEntries(512)) ssram (
     .clockA(clock),
     .clockB(~clock),
-    .writeEnableA(ok & writeEnableA),
+    .writeEnableA(ok && writeEnableA),
     .writeEnableB(1'b0), // Not used
     .addressA(addrA),
     .addressB(9'd0), // Not used
@@ -43,14 +43,14 @@ module ramDmaCi #(parameter [7:0]customId=8'hA5)
         result_reg <= 32'd0;
     end
 
-    else if (ok && !writeEnableA)
+    else if (ok)
     begin
       result_reg <= buffer;
     end
   end
 
 
-  assign result = result_reg;
+  assign result = !writeEnableA ? result_reg : 32'd0;
   assign done = ok;
 
 endmodule
