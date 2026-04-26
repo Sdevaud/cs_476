@@ -60,11 +60,11 @@ int main() {
   }
 
 
-  printf("\n === Test DMA --> Ci-memory ===\n");
+  printf("\n === Test Bus --> Ci-memory ===\n");
 
   uint32_t desc[10]; // descending numbers
   for (int i = 0; i < 10; ++i) {
-      desc[i] = swap_u32(9 - i); // cpu is big-endian, bus is little-endian, so we swap here
+      desc[i] = 9 - i;
   }
   uint32_t desc_addr = 0;
   uint32_t desc_block_size = 10;
@@ -73,7 +73,7 @@ int main() {
 
   uint32_t ones[256];
   for (int i = 0; i < 256; ++i) {
-      ones[i] = swap_u32(1);
+      ones[i] = 1;
   }
   uint32_t ones_addr = 10;
   uint32_t ones_block_size = 256;
@@ -96,6 +96,9 @@ int main() {
     if (data != 9 - (i-desc_addr)) printf("Whoops, at address (%03X) we have '%d' instead of %d\n", i, data, 9-(i-desc_addr));
   }
 
+  printf("-Stop transfer ...\n");
+  writeCi(STAT_CTRL, 0);
+
 
   printf("\n-Write array of ones to Ci-memory\n");
   printf("-Configure registers ...\n");
@@ -112,6 +115,32 @@ int main() {
   for (int i = ones_addr; i < ones_addr+ones_block_size; ++i) {
     readCi(i, &data);
     if (data != 1) printf("Whoops, at address (%03X) we have '%d' instead of 1\n", i, data);
+  }
+
+  printf("-Stop transfer ...\n");
+  writeCi(STAT_CTRL, 0);
+
+
+
+  printf("\n === Test Ci-memory --> Bus ===\n");
+
+  printf("\n-Overwrite everything with zeros\n");
+  for (int i = 0; i < 512; ++i) {
+    writeCi(i, 0);
+  }
+
+  printf("-Reset registers ...\n");
+  writeCi(BUS_START, (uint32_t) &ones[0]);
+  writeCi(MEMORY_START, ones_addr);
+
+  printf("\n-Write to buffer that previously held ones\n");
+  printf("-Start transfer ...\n");
+  writeCi(STAT_CTRL, 2);
+
+  printf("Verify transfer ...\n");
+  for (int i = 0; i < 256; ++i) {
+    data = ones[i];
+    if (data != 0) printf("Whoops, at index (%d) we have '%d' instead of 0\n", i, data);
   }
 
   printf("Test finished\n");
