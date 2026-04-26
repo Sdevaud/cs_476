@@ -90,11 +90,15 @@ int main() {
   printf("-Start transfer ...\n");
   writeCi(STAT_CTRL, 1);
 
-  printf("Verify transfer ...\n");
+  printf("-Verify transfer ...\n");
   for (int i = desc_addr; i < desc_addr+desc_block_size; ++i) {
     readCi(i, &data);
     if (data != 9 - (i-desc_addr)) printf("Whoops, at address (%03X) we have '%d' instead of %d\n", i, data, 9-(i-desc_addr));
   }
+
+  
+  printf("-Stop transfer ...\n");
+  writeCi(STAT_CTRL, 0);
 
 
   printf("\n-Write array of ones to Ci-memory\n");
@@ -108,12 +112,12 @@ int main() {
   printf("-Start transfer ...\n");
   writeCi(STAT_CTRL, 1);
 
-  printf("Verify transfer ...\n");
+  printf("-Verify transfer ...\n");
   for (int i = ones_addr; i < ones_addr+ones_block_size; ++i) {
     readCi(i, &data);
     if (data != 1) printf("Whoops, at address (%03X) we have '%d' instead of 1\n", i, data);
   }
 
-  printf("Test finished\n");
+  printf("\nTest finished\n");
 
 }

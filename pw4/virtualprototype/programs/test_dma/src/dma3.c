@@ -64,7 +64,7 @@ int main() {
 
   uint32_t desc[10]; // descending numbers
   for (int i = 0; i < 10; ++i) {
-      desc[i] = 9 - i;
+      desc[i] = swap_u32(9 - i);
   }
   uint32_t desc_addr = 0;
   uint32_t desc_block_size = 10;
@@ -73,7 +73,7 @@ int main() {
 
   uint32_t ones[256];
   for (int i = 0; i < 256; ++i) {
-      ones[i] = 1;
+      ones[i] = swap_u32(1);
   }
   uint32_t ones_addr = 10;
   uint32_t ones_block_size = 256;
@@ -111,7 +111,7 @@ int main() {
   printf("-Start transfer ...\n");
   writeCi(STAT_CTRL, 1);
 
-  printf("Verify transfer ...\n");
+  printf("-Verify transfer ...\n");
   for (int i = ones_addr; i < ones_addr+ones_block_size; ++i) {
     readCi(i, &data);
     if (data != 1) printf("Whoops, at address (%03X) we have '%d' instead of 1\n", i, data);
@@ -137,12 +137,12 @@ int main() {
   printf("-Start transfer ...\n");
   writeCi(STAT_CTRL, 2);
 
-  printf("Verify transfer ...\n");
+  printf("-Verify transfer ...\n");
   for (int i = 0; i < 256; ++i) {
     data = ones[i];
     if (data != 0) printf("Whoops, at index (%d) we have '%d' instead of 0\n", i, data);
   }
 
-  printf("Test finished\n");
+  printf("\nTest finished\n");
 
 }
