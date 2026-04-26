@@ -18,7 +18,7 @@ void readCiMemory(uint32_t address, uint32_t *data) {
 int main() {
   uint32_t data;
 
-  printf("\n === Test DMA ===\n");
+  printf("\n === Test DMA Memory ===\n");
 
   printf("Check what's there now:\n");
   readCiMemory(0, &data);
