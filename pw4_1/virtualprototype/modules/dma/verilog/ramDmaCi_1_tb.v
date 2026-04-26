@@ -70,7 +70,6 @@ module ramDmaCi_tb;
 	);
 	begin
 		issue_cmd({22'd0, 1'b0, addr}, 32'd0, CUSTOM_ID);
-		repeat (2) @(posedge clock);
 
 		if (result !== expected) begin
 			$display("ERROR  addr=%0d expected=0x%08h got=0x%08h", addr, expected, result);

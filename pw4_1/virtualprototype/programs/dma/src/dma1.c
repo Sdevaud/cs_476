@@ -5,10 +5,9 @@ Author : Till Beyer 25.04.2026
 #include <stdint.h>
 #include <stdio.h>
 
-
+#define WRITE_OPERATION (1<<9)
 void writeCiMemory(uint32_t address, uint32_t data) { // the ci ID is 0xA5 -> 165 in decimal
-  uint32_t writeOperation= 1<<9;
-  asm volatile("l.nios_rrr r0,%[in1],%[in2],165" ::[in1] "r"(address | writeOperation), [in2]"r"(data));
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],165" ::[in1] "r"(address | WRITE_OPERATION), [in2]"r"(data));
 }
 
 void readCiMemory(uint32_t address, uint32_t *data) {

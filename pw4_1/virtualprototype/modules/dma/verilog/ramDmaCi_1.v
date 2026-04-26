@@ -24,12 +24,15 @@ module ramDmaCi #(parameter [7:0]customId=8'hA5)
   wire write_mem_data = ok && writeEnableA;
   wire read_mem_data  = ok && !writeEnableA;
   reg read_mem_data_reg;
+
   always @(posedge clock) begin
     if (reset)
       read_mem_data_reg <= 1'b0;
     else
       read_mem_data_reg <= read_mem_data;
   end
+
+  assign done = (ok && writeEnableA) || read_mem_data_reg;
 
   dualPortSSRAM #(.bitwidth(32), .nrOfEntries(512)) ssram (
     .clockA(clock),
@@ -46,21 +49,11 @@ module ramDmaCi #(parameter [7:0]customId=8'hA5)
 
 
   // Read and Write from CPU
-  always @(posedge clock or posedge reset)
-  begin
-    if (reset) 
-    begin
-        result_reg <= 32'd0;
-    end
-
-    else if (ok)
-    begin
-      result_reg <= buffer;
-    end
+  always @* begin
+    result_reg = buffer;
   end
 
 
-  assign result = read_mem_data ? result_reg : 32'd0;
-  assign done = ok;
+  assign result = read_mem_data_reg ? result_reg : 32'd0;
 
 endmodule
