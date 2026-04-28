@@ -45,3 +45,5 @@ This archive contains the code implementation for PW4. In each of the exercises 
 * `virtualprototype/systems/singleCore/scripts/yosysOr1420.script`
   Added two lines to include `ramDmaCi_X.v` and `dual_ported.v`.
 
+### Note
+openFPGALoader was causing problems on our machines so that we replaced it with `ecpprog -S` in the `synthesizeOr1420.sh` script

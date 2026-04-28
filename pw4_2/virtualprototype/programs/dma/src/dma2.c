@@ -68,7 +68,7 @@ int main() {
 
   uint32_t desc[10]; // descending numbers
   for (int i = 0; i < 10; ++i) {
-      desc[i] = swap_u32(9 - i); // cpu is big-endian, bus is little-endian, so we swap here
+      desc[i] = 9 - i;
   }
   uint32_t desc_addr = 0;
   uint32_t desc_block_size = 10;
@@ -77,13 +77,13 @@ int main() {
 
   uint32_t ones[256];
   for (int i = 0; i < 256; ++i) {
-      ones[i] = swap_u32(1);
+      ones[i] = 1;
   }
   uint32_t ones_addr = 10;
   uint32_t ones_block_size = 256;
   uint32_t ones_burst_size = 16;
 
-  printf("\n-Write array of ascending numbers to Ci-memory\n");
+  printf("\n-Write array of descending numbers to Ci-memory\n");
   printf("-Configure registers ...\n");
 
   writeCi(BUS_START, (uint32_t) &desc[0]);
@@ -97,6 +97,7 @@ int main() {
   printf("-Verify transfer ...\n");
   for (int i = desc_addr; i < desc_addr+desc_block_size; ++i) {
     readCi(i, &data);
+    data = swap_u32(data); // cpu is big-endian, bus is little-endian, so we swap here
     if (data != 9 - (i-desc_addr)) printf("Whoops, at address (%03X) we have '%d' instead of %d\n", i, data, 9-(i-desc_addr));
   }
 
@@ -119,6 +120,7 @@ int main() {
   printf("-Verify transfer ...\n");
   for (int i = ones_addr; i < ones_addr+ones_block_size; ++i) {
     readCi(i, &data);
+    data = swap_u32(data);
     if (data != 1) printf("Whoops, at address (%03X) we have '%d' instead of 1\n", i, data);
   }
 
