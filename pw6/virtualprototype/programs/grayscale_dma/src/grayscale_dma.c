@@ -62,7 +62,6 @@ int main () {
     asm volatile ("l.nios_rrr r0,r0,%[in2],12"::[in2]"r"(7));
 
     uint32_t * rgb = (uint32_t *) &rgb565[0];
-    uint32_t * gray = (uint32_t *) &grayscale[0];
 
     uint32_t bufferA = 0;
     uint32_t bufferB = 256;
@@ -80,19 +79,24 @@ int main () {
     writeCi(STAT_CTRL, 0); // stop transfer
 
     for (int idx = 0; idx < 599; idx++) {
-      pixel_block_addr = (uint32_t) &rgb[256*idx];
+      pixel_block_addr = (uint32_t) &rgb[256*(idx+1)];
 
       writeCi(BUS_START, pixel_block_addr);
       writeCi(MEMORY_START, bufferB);
       writeCi(BLOCK_SIZE, 256);
-      writeCi(BURST_SIZE, 128);
       writeCi(STAT_CTRL, 1); // start transfer bus -> ci
 
       // Convert pixels from bufferA: read 2x 32-bit word (4x16 bit pixel)) -> convert to 1x 32-bit gray word
       for (int pixelIdx = 0; pixelIdx < 256; pixelIdx += 2) {
         readCi(bufferA + pixelIdx, &pixel1);
-        readCi(bufferA + pixelIdx + 1, &pixel2); 
-        asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(swap_u32(pixel2)),[in2]"r"(swap_u32(pixel1)));
+        readCi(bufferA + pixelIdx + 1, &pixel2);
+
+        // Swap order because different endianess of CPU and DMA
+        uint32_t pixel1Reversed = swap_u32(pixel1);
+        pixel1Reversed = (pixel1Reversed & 0xFFFF0000) >> 16 | (pixel1Reversed & 0x0000FFFF) << 16;
+        uint32_t pixel2Reversed = swap_u32(pixel2);
+        pixel2Reversed = (pixel2Reversed & 0xFFFF0000) >> 16 | (pixel2Reversed & 0x0000FFFF) << 16;
+        asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel2Reversed),[in2]"r"(pixel1Reversed));
         writeCi(bufferA + pixelIdx / 2, grayPixels);
       }
 
@@ -103,7 +107,6 @@ int main () {
       writeCi(BUS_START, (uint32_t) &grayscale[512*idx]);
       writeCi(MEMORY_START, bufferA);
       writeCi(BLOCK_SIZE, 128);
-      writeCi(BURST_SIZE, 128);
       writeCi(STAT_CTRL, 2); // start transfer ci -> bus
       waitForDMA();
       writeCi(STAT_CTRL, 0); // stop transfer
@@ -113,22 +116,28 @@ int main () {
       bufferB = bufferB ^ 256;
     }
 
-    // Process the last chunk (bufferB)
+    // Process the last chunk (bufferB), since we have already swapped addresses in the loop we must now use bufferA
     for (int pixelIdx = 0; pixelIdx < 256; pixelIdx += 2) {
-      readCi(bufferB + pixelIdx, &pixel1);
-      readCi(bufferB + pixelIdx + 1, &pixel2);
-      asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(swap_u32(pixel2)),[in2]"r"(swap_u32(pixel1)));
-      writeCi(bufferB + pixelIdx / 2, grayPixels);
+      readCi(bufferA + pixelIdx, &pixel1);
+      readCi(bufferA + pixelIdx + 1, &pixel2);
+
+      uint32_t pixel1Reversed = swap_u32(pixel1);
+      pixel1Reversed = (pixel1Reversed & 0xFFFF0000) >> 16 | (pixel1Reversed & 0x0000FFFF) << 16;
+      uint32_t pixel2Reversed = swap_u32(pixel2);
+      pixel2Reversed = (pixel2Reversed & 0xFFFF0000) >> 16 | (pixel2Reversed & 0x0000FFFF) << 16;
+      asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel2Reversed),[in2]"r"(pixel1Reversed));
+      writeCi(bufferA + pixelIdx / 2, grayPixels);
     }
     
     writeCi(BUS_START, (uint32_t) &grayscale[512*599]);
-    writeCi(MEMORY_START, bufferB);
+    writeCi(MEMORY_START, bufferA);
     writeCi(BLOCK_SIZE, 128);
-    writeCi(BURST_SIZE, 128);
     writeCi(STAT_CTRL, 2); // start transfer ci -> bus
     waitForDMA();
     writeCi(STAT_CTRL, 0); // stop transfer
 
+
+    // Profiling
     asm volatile ("l.nios_rrr %[out1],r0,%[in2],12":[out1]"=r"(cycles):[in2]"r"(1<<8|7<<4));
     asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],12":[out1]"=r"(stall):[in1]"r"(1),[in2]"r"(1<<9));
     asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],12":[out1]"=r"(idle):[in1]"r"(2),[in2]"r"(1<<10));
