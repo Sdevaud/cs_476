@@ -166,6 +166,40 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   reg [8:0] s_busSelectReg;
   wire [31:0] s_busPixelWord;
   wire [31:0] s_pixelWord = {s_byte1Reg,camData,s_byte3Reg,s_byte2Reg};
+
+  /* ==== Added by Till ==== */
+  
+  // Deconstruct into two 8bit grayscale pixels
+  function [7:0] rgb565_to_gray; // copied from PW2
+    input [15:0] rgb;
+
+    reg [15:0] r8; 
+    reg [15:0] g8;
+    reg [15:0] b8;
+
+    begin
+      r8 = {rgb[15:11], 3'b000}; 
+      g8 = {rgb[10:5],  2'b00};
+      b8 = {rgb[4:0],   3'b000};
+
+      rgb565_to_gray = (r8*54 + g8*183 + b8*19) >> 8;
+    end
+  endfunction
+
+  wire [7:0] gray0 = rgb565_to_gray(s_pixelWord[15:0]);
+  wire [7:0] gray1 = rgb565_to_gray(s_pixelWord[31:16]);
+
+  // Convert again into RGB565 format but grayscale
+  wire [4:0] red0  = gray0[7:3];
+  wire [5:0] green0 = gray0[7:2];
+  wire [4:0] blue0 = gray0[7:3];
+  wire [4:0] red1  = gray1[7:3];
+  wire [5:0] green1 = gray1[7:2];
+  wire [4:0] blue1 = gray1[7:3];
+  wire [31:0] s_grayscalePixelWord = {red1, green1, blue1, red0, green0, blue0}; 
+
+  /* =======================*/
+
   wire s_weLineBuffer = (s_pixelCountReg[1:0] == 2'b11) ? hsync : 1'b0;
   
   always @(posedge pclk)
@@ -180,7 +214,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
                              .clock1(pclk),
                              .clock2(clock),
                              .writeEnable(s_weLineBuffer),
-                             .dataIn1(s_pixelWord),
+                             .dataIn1(s_grayscalePixelWord),
                              .dataOut2(s_busPixelWord));
 
   /*
