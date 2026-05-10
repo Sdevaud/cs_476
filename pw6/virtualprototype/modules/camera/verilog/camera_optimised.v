@@ -166,7 +166,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   reg [8:0] s_busSelectReg;
   wire [31:0] s_busPixelWord;
 
-  /* ==== Added Sebastien ==== */
+  /* ==== Added by Sebastien ==== */
 
   wire [7:0] gray0, gray1, gray2, gray3;
   rgb565Grayscale Gray0 (.rgb565({s_byte7Reg, s_byte6Reg}),
@@ -180,8 +180,6 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
 
   // Convert again into RGB565 format but grayscale
   wire [31:0] s_grayscalePixelWord = {gray3, gray2, gray1, gray0}; 
-
-  /* =======================*/
 
   wire s_weLineBuffer = (s_pixelCountReg[2:0] == 3'b111) ? hsync : 1'b0;
   
@@ -203,6 +201,8 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
                              .writeEnable(s_weLineBuffer),
                              .dataIn1(s_grayscalePixelWord),
                              .dataOut2(s_busPixelWord));
+
+   /* =======================*/
 
   /*
    *

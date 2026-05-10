@@ -58,7 +58,7 @@ read -sv ../../../modules/support/verilog/sram_512x32.v
 read -sv ../../../modules/support/verilog/sram_1024x16_dp.v
 read -sv ../../../modules/support/verilog/sram2048x8Dp.v
 
-
+# uncomment and comment the part for which exercicise you want to used
 ##############################################################
 read -sv ../../../modules/camera/verilog/camera.v
 # read -sv ../../../modules/camera/verilog/camera_simple.v

@@ -1,54 +1,169 @@
-# Embedded system design PW4
 
-### **Group 23:**
+# Embedded System Design – PW6
 
-* Sébastien Devaud (315144)
-* Till Beyer (414801)
+## Group 23
+
+- Sébastien Devaud (315144)
+- Till Beyer (414801)
+
+
+## Exercise 1 – Grayscale Conversion Using DMA
+
+**Source file:**
+
+```text
+/pw6/virtualprototype/programs/grayscale_dma/src/grayscale_dma.c
+```
+This file contains `grayscale_dma.c`, which implements the grayscale conversion using a DMA-based solution.
+
+You must also modify the following file:
+
+```text
+/pw6/virtualprototype/systems/singleCore/scripts/yosysOr1420.script
+```
+
+At the end of the file:
+
+1. Comment out all paths located between the `### ###` markers.
+2. Uncomment the following line:
+
+```text
+read -sv ../../../modules/camera/verilog/camera.v
+```
+
+Run the following commands:
+
+```bash
+cd systems/singleCore/sandbox
+../scripts/synthesizeOr1420.sh
+```
+
+
+### Performance Comparison
+#### Grayscale with Custom Instruction (CI) and DMA
+
+```text
+CPU-Cycles : 3 021 176 
+CPU-Stalls : 458 948 
+CPU-Idles  : 1 440 572
+```
+
+#### Grayscale with Custom Instruction (CI) and without DMA
+
+```text
+CPU-Cycles : 29 129 333
+CPU-Stalls : 17 756 326
+CPU-Idles  : 16 754 135
+```
+
+#### Grayscale without Custom Instruction (CI) and without DMA
+
+```text
+CPU-Cycles : 8 204 047
+CPU-Stalls : 6 668 095
+CPU-Idles  : 3 602 631
+```
+
+These results show the impact of the DMA, which offloads data transfers from the CPU. As a result, the processor can focus exclusively on grayscale conversion computations instead of handling memory transfers.
 
 ---
 
-### Launch
-Les trois exercicise peuvent être trouver à ces emplacements : 
+## Exercise 2 – Grayscale Conversion in the Camera Module
 
-1)   /virtualprototype/programs/grayscale_dma/src/
-   vous y trouverez le fichier grayscale_dma.c qui utilise la solution avec le DMA, nous avons obtenues ces pefromances dans l'état actule : 
+**Source file:**
 
-    On voit ici l'Impact du DMA qui permet de décharger le CPU lorsqu'il fait ces opérations de 
-  
+```text
+/pw6/virtualprototype/modules/camera/verilog/camera_simple.v
+```
 
-2) 
+### Required Modifications
+
+You must also modify the following file:
+
+```text
+/pw6/virtualprototype/systems/singleCore/scripts/yosysOr1420.script
+```
+
+At the end of the file:
+
+1. Comment out all paths located between the `### ###` markers.
+2. Uncomment the following line:
+
+```text
+read -sv ../../../modules/camera/verilog/camera_simple.v
+```
+
+Run the following commands:
+
+```bash
+cd systems/singleCore/sandbox
+../scripts/synthesizeOr1420.sh
+```
+
+you also need to go in the file : 
+```bash
+/programs/streaming/src/streaming.c
+```
+
+and UNCOMMENT :
+```bash
+"#define __RGB565__"
+```
+
+and make again in straming folder
+
+### Description
+
+This version converts the pixel data received from the camera directly into grayscale, but it does not use the full width of the available bus.
 
 ---
 
-### Content
+## Exercise 3 – Optimized Grayscale Conversion
 
-This archive contains the code implementation for PW4. In each of the exercises the following files/directories were added or modified:
+**Source file:**
+
+```text
+/pw6/virtualprototype/modules/camera/verilog/camera_optimised.v
+```
+
+### Required Modifications
+
+You must also modify the following file:
+
+```text
+/pw6/virtualprototype/systems/singleCore/scripts/yosysOr1420.script
+```
+
+At the end of the file:
+
+1. Comment out all paths located between the `### ###` markers.
+2. Uncomment the following line:
+
+```text
+read -sv ../../../modules/camera/verilog/camera_optimised.v
+```
+
+Run the following commands:
+
+```bash
+cd systems/singleCore/sandbox
+../scripts/synthesizeOr1420.sh
+```
+
+you also need to go in the file : 
+```bash
+/programs/streaming/src/streaming.c
+```
+
+and COMMENT :
+```bash
+"#define __RGB565__"
+```
+
+and make again in straming folder
+
+### Description
+
+This version also converts the camera pixel data directly into grayscale, but it uses a 32-bit bus to improve data throughput.
 
 
-* `virtualprototype/programs/dma/src/dmaX.c`
-  Contains code to test the functionality of the given custom instruction.
-
-
-* `virtualprototype/modules/dma/verilog`
-  Contains the Verilog files defining:
-
-  * the dual ported ssram (`dual_ported.v`)
-  * the dma controller (`ramDmaCi_X.v`)
-  * a testbench for testing the custom instruction (`ramDmaCi_1_tb.v`, only for exercise 1)
-
-  The testbench can be run with iverilog using:
-
-  ```
-  iverilog -s ramDmaCi_tb -o testbench ramDmaCi_1_tb.v ramDmaCi_1.v dual_ported.v ramDmaCi_1_tb.v
-  ```
-
-
-* `virtualprototype/systems/singleCore/verilog/or1420SingleCore.v`
-  We implemented the dma module and added the necessary connections.
-
-
-* `virtualprototype/systems/singleCore/scripts/yosysOr1420.script`
-  Added two lines to include `ramDmaCi_X.v` and `dual_ported.v`.
-
-### Note
-openFPGALoader was causing problems on our machines so that we replaced it with `ecpprog -S` in the `synthesizeOr1420.sh` script
