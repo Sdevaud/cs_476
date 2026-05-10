@@ -93,11 +93,9 @@ int main () {
 
         // Swap order because different endianess of CPU and DMA
         uint32_t pixel1Reversed = swap_u32(pixel1);
-        pixel1Reversed = (pixel1Reversed & 0xFFFF0000) >> 16 | (pixel1Reversed & 0x0000FFFF) << 16;
         uint32_t pixel2Reversed = swap_u32(pixel2);
-        pixel2Reversed = (pixel2Reversed & 0xFFFF0000) >> 16 | (pixel2Reversed & 0x0000FFFF) << 16;
-        asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel2Reversed),[in2]"r"(pixel1Reversed));
-        writeCi(bufferA + pixelIdx / 2, grayPixels);
+        asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel1Reversed),[in2]"r"(pixel2Reversed));
+        writeCi(bufferA + pixelIdx / 2, swap_u32(grayPixels));
       }
 
       waitForDMA();
@@ -122,11 +120,9 @@ int main () {
       readCi(bufferA + pixelIdx + 1, &pixel2);
 
       uint32_t pixel1Reversed = swap_u32(pixel1);
-      pixel1Reversed = (pixel1Reversed & 0xFFFF0000) >> 16 | (pixel1Reversed & 0x0000FFFF) << 16;
       uint32_t pixel2Reversed = swap_u32(pixel2);
-      pixel2Reversed = (pixel2Reversed & 0xFFFF0000) >> 16 | (pixel2Reversed & 0x0000FFFF) << 16;
-      asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel2Reversed),[in2]"r"(pixel1Reversed));
-      writeCi(bufferA + pixelIdx / 2, grayPixels);
+      asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel1Reversed),[in2]"r"(pixel2Reversed));
+      writeCi(bufferA + pixelIdx / 2, swap_u32(grayPixels));
     }
     
     writeCi(BUS_START, (uint32_t) &grayscale[512*599]);
