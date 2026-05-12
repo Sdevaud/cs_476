@@ -289,8 +289,8 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
 
 
   reg [7:0] current_cam_gray_delayed;
-  reg [7:0] current_mid_gray_delayed;
-  reg [7:0] current_top_gray_delayed;
+  // reg [7:0] current_mid_gray_delayed;
+  // reg [7:0] current_top_gray_delayed;
   reg       shift_enable_delayed;
 
   always @(posedge pclk) begin
@@ -298,8 +298,8 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       current_cam_gray_delayed <= current_cam_gray;
 
       // 2. Delay the RAM-sourced pixels by 1 cycle (to match the read latency)
-      current_mid_gray_delayed <= current_mid_gray;
-      current_top_gray_delayed <= current_top_gray;
+      // current_mid_gray_delayed <= current_mid_gray;
+      // current_top_gray_delayed <= current_top_gray;
 
       // 3. Delay the shift signal
       shift_enable_delayed <= (hsync && s_pixelCountReg[0] == 1'b1);
@@ -322,8 +322,8 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
           p32 <= p33;
 
           p33 <= {3'b0, current_cam_gray_delayed}; // Newest pixel from camera
-          p23 <= {3'b0, current_mid_gray_delayed}; // Corresponding pixel from 1 line ago
-          p13 <= {3'b0, current_top_gray_delayed}; // Corresponding pixel from 2 lines ago
+          p23 <= {3'b0, current_mid_gray}; // Corresponding pixel from 1 line ago
+          p13 <= {3'b0, current_top_gray}; // Corresponding pixel from 2 lines ago
       end
   end
   
@@ -357,7 +357,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   // 4. Corrected Storage for the 4 results
   reg [7:0] sobelResult0, sobelResult1, sobelResult2, sobelResult3;
   always @(posedge pclk) begin
-      if (s_pixelCountReg[0] == 1'b1) begin
+      if (shift_enable_delayed) begin
           case (groupCount)
               2'b00: sobelResult0 <= sobelResult;
               2'b01: sobelResult1 <= sobelResult;
@@ -372,20 +372,30 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   // =======================
 
   
-  // reg s_weLineBuffer_delayed;
-  // reg [8:0] s_writeAddressReg;
+  reg s_weLineBuffer_delayed;
+  reg [8:0] s_writeAddressReg;
   // always @(posedge pclk) begin
   //     // Delay the write enable by one cycle so the packed word is ready
-  //     s_weLineBuffer_delayed <= (s_pixelCountReg[2:0] == 3'b111) ? hsync : 1'b0;
+  //     s_weLineBuffer_delayed <= storage_delayed;
   //     s_writeAddressReg <= s_pixelCountReg[10:3];
   // end
 
+  always @(posedge pclk) begin
+      // Only write to the 2k RAM when we have finished packing all 4 pixels (groupCount 3)
+      s_weLineBuffer_delayed <= groupCount == 2'b11;
+      
+      // The address must also be captured at this specific moment
+      if (groupCount == 2'b11) begin
+          s_writeAddressReg <= s_pixelCountReg[10:3];
+      end
+  end
 
-  dualPortRam2k lineBuffer ( .address1({1'b0, s_pixelCountReg[10:3]}),
+
+  dualPortRam2k lineBuffer ( .address1(s_writeAddressReg),
                              .address2(s_busSelectReg),
                              .clock1(pclk),
                              .clock2(clock),
-                             .writeEnable(s_weLineBuffer),
+                             .writeEnable(s_weLineBuffer_delayed),
                              .dataIn1(sobelPixelWord),
                              .dataOut2(s_busPixelWord));
 
