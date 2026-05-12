@@ -39,32 +39,30 @@ cd systems/singleCore/sandbox
 ```
 
 
-### Performance Comparison
+### Performance Comparison (Averaged over 10 runs)
 #### Grayscale with Custom Instruction (CI) and DMA
-
 ```text
-CPU-Cycles : 3 021 176 
-CPU-Stalls : 458 948 
-CPU-Idles  : 1 440 572
+CPU-Cycles : 2 553 500 
+CPU-Stalls : 456 200 
+CPU-Idles  : 1 070 500
 ```
 
 #### Grayscale with Custom Instruction (CI) and without DMA
-
 ```text
-CPU-Cycles : 29 129 333
-CPU-Stalls : 17 756 326
-CPU-Idles  : 16 754 135
+CPU-Cycles : 8 173 000
+CPU-Stalls : 6 447 000
+CPU-Idles  : 3 518 000
 ```
+
 
 #### Grayscale without Custom Instruction (CI) and without DMA
-
 ```text
-CPU-Cycles : 8 204 047
-CPU-Stalls : 6 668 095
-CPU-Idles  : 3 602 631
+CPU-Cycles : 29 020 000
+CPU-Stalls : 17 511 000
+CPU-Idles  : 16 401 000
 ```
 
-These results show the impact of the DMA, which offloads data transfers from the CPU. As a result, the processor can focus exclusively on grayscale conversion computations instead of handling memory transfers.
+These profiling results shows the impact of the DMA, which is able to achieve the same grayscale conversion using significantly fewer clock cycles. The DMA approach offloads data transfers from the CPU. As a result, the processor can focus exclusively on coordinating the grayscale conversion via the CI instead of handling memory transfers.
 
 ---
 
@@ -116,6 +114,10 @@ and make again in straming folder
 
 This version converts the pixel data received from the camera directly into grayscale, but it does not use the full width of the available bus.
 
+### Performance discussion
+
+Though we don't make optimal use of our bus capacity, implementing the grayscale conversion directly into the streaming still achieves a significant performance improvement compared to the previous exercise. The resulting video feed is smoother and more responsive. 
+
 ---
 
 ## Exercise 3 – Optimized Grayscale Conversion
@@ -165,5 +167,8 @@ and make again in straming folder
 ### Description
 
 This version also converts the camera pixel data directly into grayscale, but it uses a 32-bit bus to improve data throughput.
+
+### Performance discussion
+This optimized version achieves the best performance among the three implementations. By making full use of the bus width, we can transfer more pixel data per cycle. Although the difference compared to the implementation in Ex. 2 is not dramatic, there still is an improvement in the smoothness and responsiveness of the video.
 
 
