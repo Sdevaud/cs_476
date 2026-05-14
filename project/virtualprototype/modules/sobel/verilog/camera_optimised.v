@@ -42,6 +42,9 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
    *     7        Read (self clearing): Single image grabbing done.
    *
    */
+
+  reg [1:0] s_singleShotActionReg;
+
   function integer clog2;
     input integer value;
     begin
@@ -181,19 +184,19 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   // Convert again into RGB565 format but grayscale
   wire [31:0] s_grayscalePixelWord = {gray3, gray2, gray1, gray0}; 
   /* =======================*/
-                
-  wire s_weLineBuffer = (s_pixelCountReg[2:0] == 3'b111) ? hsync : 1'b0;
+  wire [2:0] subPixelCount = s_pixelCountReg[2:0];
+  wire s_weLineBuffer = (subPixelCount == 3'b111) ? hsync : 1'b0;
   
   always @(posedge pclk)
     begin
-      s_byte7Reg <= (s_pixelCountReg[2:0] == 3'b000 && hsync == 1'b1) ? camData : s_byte7Reg;
-      s_byte6Reg <= (s_pixelCountReg[2:0] == 3'b001 && hsync == 1'b1) ? camData : s_byte6Reg;
-      s_byte5Reg <= (s_pixelCountReg[2:0] == 3'b010 && hsync == 1'b1) ? camData : s_byte5Reg;
-      s_byte4Reg <= (s_pixelCountReg[2:0] == 3'b011 && hsync == 1'b1) ? camData : s_byte4Reg;
-      s_byte3Reg <= (s_pixelCountReg[2:0] == 3'b100 && hsync == 1'b1) ? camData : s_byte3Reg;
-      s_byte2Reg <= (s_pixelCountReg[2:0] == 3'b101 && hsync == 1'b1) ? camData : s_byte2Reg;
-      s_byte1Reg <= (s_pixelCountReg[2:0] == 3'b110 && hsync == 1'b1) ? camData : s_byte1Reg;
-      s_byte0Reg <= (s_pixelCountReg[2:0] == 3'b111 && hsync == 1'b1) ? camData : s_byte0Reg;
+      s_byte7Reg <= (subPixelCount == 3'b000 && hsync == 1'b1) ? camData : s_byte7Reg;
+      s_byte6Reg <= (subPixelCount == 3'b001 && hsync == 1'b1) ? camData : s_byte6Reg;
+      s_byte5Reg <= (subPixelCount == 3'b010 && hsync == 1'b1) ? camData : s_byte5Reg;
+      s_byte4Reg <= (subPixelCount == 3'b011 && hsync == 1'b1) ? camData : s_byte4Reg;
+      s_byte3Reg <= (subPixelCount == 3'b100 && hsync == 1'b1) ? camData : s_byte3Reg;
+      s_byte2Reg <= (subPixelCount == 3'b101 && hsync == 1'b1) ? camData : s_byte2Reg;
+      s_byte1Reg <= (subPixelCount == 3'b110 && hsync == 1'b1) ? camData : s_byte1Reg;
+      s_byte0Reg <= (subPixelCount == 3'b111 && hsync == 1'b1) ? camData : s_byte0Reg;
     end
 
   // ==== Added by Till ====  
@@ -219,12 +222,20 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       end
   end
 
-  wire weBuffer0 = (s_pixelCountReg[2:0] == 3'b111 && bufferSelectReg == 2'd0) ? hsync : 1'b0;
-  wire weBuffer1 = (s_pixelCountReg[2:0] == 3'b111 && bufferSelectReg == 2'd1) ? hsync : 1'b0;
-  wire weBuffer2 = (s_pixelCountReg[2:0] == 3'b111 && bufferSelectReg == 2'd2) ? hsync : 1'b0;
+  // wire weBuffer0 = (subPixelCount == 3'b111 && bufferSelectReg == 2'd0) ? hsync : 1'b0;
+  // wire weBuffer1 = (subPixelCount == 3'b111 && bufferSelectReg == 2'd1) ? hsync : 1'b0;
+  // wire weBuffer2 = (subPixelCount == 3'b111 && bufferSelectReg == 2'd2) ? hsync : 1'b0;
+  // wire [7:0] lineBufferAddr = s_pixelCountReg[10:3];
+  reg weBuffer0, weBuffer1, weBuffer2;
+  reg [7:0] lineBufferAddr;
+  always @(posedge pclk) begin
+      weBuffer0 <= (subPixelCount == 3'b111 && bufferSelectReg == 2'd0) ? hsync : 1'b0;
+      weBuffer1 <= (subPixelCount == 3'b111 && bufferSelectReg == 2'd1) ? hsync : 1'b0;
+      weBuffer2 <= (subPixelCount == 3'b111 && bufferSelectReg == 2'd2) ? hsync : 1'b0;
+      lineBufferAddr <= s_pixelCountReg[10:3];
+  end
 
   wire [31:0] busPixelWord0, busPixelWord1, busPixelWord2;
-  wire [7:0] lineBufferAddr = s_pixelCountReg[10:3];
 
   dualPortRam640 lineBuffer0 ( .address1 (lineBufferAddr),
                               .address2(lineBufferAddr),
@@ -253,11 +264,14 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   // [p21] [p22] [p23]
   // [p31] [p32] [p33] <- new pixel from camera
   reg [7:0] p11, p12, p13, p21, p22, p23, p31, p32, p33;
-  wire [1:0] groupCount = s_pixelCountReg[2:1]; // keeps track of which pixel in the current 4-pixel group we are at (00, 01, 10, 11)
+  reg [1:0] groupCount;// = s_pixelCountReg[2:1]; // keeps track of which pixel in the current 4-pixel group we are at (00, 01, 10, 11)
 
   // 1. Pick the "current" grayscale pixel from the 4 available based on camera timing
   // This is going to be p33 in the 3x3 window
   reg [7:0] current_cam_gray;
+  always @(posedge pclk) begin
+          groupCount <= s_pixelCountReg[2:1];
+  end
   always @* begin
       case (groupCount)
           2'b00: current_cam_gray = gray0;
@@ -293,6 +307,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   // reg [7:0] current_mid_gray_delayed;
   // reg [7:0] current_top_gray_delayed;
   reg       shift_enable_delayed;
+  reg  shift_enable_delayed2;
 
   always @(posedge pclk) begin
       // 1. Delay the camera pixel by 1 cycle
@@ -304,17 +319,19 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
 
       // 3. Delay the shift signal
       shift_enable_delayed <= (hsync && s_pixelCountReg[0] == 1'b1);
+      shift_enable_delayed2 <= shift_enable_delayed;
   end
 
   // 3. Shift the window every time a 16-bit pixel pair finishes (every 2nd camData byte)
   always @(posedge pclk) begin
-      if (!hsync) begin
-        // Reset the window at the start of every line
-        p11 <= 0; p12 <= 0; p13 <= 0;
-        p21 <= 0; p22 <= 0; p23 <= 0;
-        p31 <= 0; p32 <= 0; p33 <= 0;
+      // if (!hsync) begin
+      //   // Reset the window at the start of every line
+      //   p11 <= 0; p12 <= 0; p13 <= 0;
+      //   p21 <= 0; p22 <= 0; p23 <= 0;
+      //   p31 <= 0; p32 <= 0; p33 <= 0;
 
-      end else if (shift_enable_delayed) begin
+      // end else
+        if (shift_enable_delayed) begin
           p11 <= p12; 
           p12 <= p13;
           p21 <= p22; 
@@ -322,7 +339,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
           p31 <= p32; 
           p32 <= p33;
 
-          p33 <= current_cam_gray_delayed; // Newest pixel from camera
+          p33 <= current_cam_gray; // Newest pixel from camera
           p23 <= current_mid_gray; // Corresponding pixel from 1 line ago
           p13 <= current_top_gray; // Corresponding pixel from 2 lines ago
       end
@@ -352,7 +369,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   // Final Result: If on border, force black. Otherwise, use Sobel.
   wire [7:0] sobelResult = (isBorder) ? 8'h00 : sobelActual;
   // debug
-  // wire [7:0] sobelResult = current_mid_gray;
+  // wire [7:0] sobelResult = p23;
 
 
   // 4. Corrected Storage for the 4 results
@@ -407,7 +424,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
    */
   reg [31:0] s_busAddressReg, s_addressDataOutReg;
   reg [8:0] s_nrOfPixelsPerLineReg;
-  reg [1:0] s_singleShotActionReg;
+
   reg s_dataValidReg;
   reg [8:0] s_burstCountReg;
   reg  s_grabberRunningReg;
