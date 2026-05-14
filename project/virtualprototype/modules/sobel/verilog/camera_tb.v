@@ -50,7 +50,7 @@ module tb_camera();
         
         repeat (4) begin : line_loop
             #100 hsync = 1;
-            repeat (16) begin : pixel_loop
+            repeat (32) begin : pixel_loop
                 @(posedge pclk) camData = camData + 1; // Fake pixel data
             end
             hsync = 0;

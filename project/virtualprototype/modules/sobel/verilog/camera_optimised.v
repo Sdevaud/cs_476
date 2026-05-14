@@ -185,7 +185,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   wire [31:0] s_grayscalePixelWord = {gray3, gray2, gray1, gray0}; 
   /* =======================*/
   wire [2:0] subPixelCount = s_pixelCountReg[2:0];
-  wire s_weLineBuffer = (subPixelCount == 3'b111) ? hsync : 1'b0;
+  wire s_weLineBuffer = (s_pixelCountReg[2:0] == 3'b111) ? hsync : 1'b0;
   
   always @(posedge pclk)
     begin
@@ -222,10 +222,6 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       end
   end
 
-  // wire weBuffer0 = (subPixelCount == 3'b111 && bufferSelectReg == 2'd0) ? hsync : 1'b0;
-  // wire weBuffer1 = (subPixelCount == 3'b111 && bufferSelectReg == 2'd1) ? hsync : 1'b0;
-  // wire weBuffer2 = (subPixelCount == 3'b111 && bufferSelectReg == 2'd2) ? hsync : 1'b0;
-  // wire [7:0] lineBufferAddr = s_pixelCountReg[10:3];
   reg weBuffer0, weBuffer1, weBuffer2;
   reg [7:0] lineBufferAddr;
   always @(posedge pclk) begin
@@ -303,34 +299,15 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
                                                         busPixelWordBeforeBefore[31:24];
 
 
-  reg [7:0] current_cam_gray_delayed;
-  // reg [7:0] current_mid_gray_delayed;
-  // reg [7:0] current_top_gray_delayed;
-  reg       shift_enable_delayed;
-  reg  shift_enable_delayed2;
+  reg shift_enable_delayed;
 
   always @(posedge pclk) begin
-      // 1. Delay the camera pixel by 1 cycle
-      current_cam_gray_delayed <= current_cam_gray;
-
-      // 2. Delay the RAM-sourced pixels by 1 cycle (to match the read latency)
-      // current_mid_gray_delayed <= current_mid_gray;
-      // current_top_gray_delayed <= current_top_gray;
-
-      // 3. Delay the shift signal
-      shift_enable_delayed <= (hsync && s_pixelCountReg[0] == 1'b1);
-      shift_enable_delayed2 <= shift_enable_delayed;
+    // Delay shift signal by one to allow values to be pulled from line buffers  
+    shift_enable_delayed <= (hsync && s_pixelCountReg[0] == 1'b1);
   end
 
   // 3. Shift the window every time a 16-bit pixel pair finishes (every 2nd camData byte)
   always @(posedge pclk) begin
-      // if (!hsync) begin
-      //   // Reset the window at the start of every line
-      //   p11 <= 0; p12 <= 0; p13 <= 0;
-      //   p21 <= 0; p22 <= 0; p23 <= 0;
-      //   p31 <= 0; p32 <= 0; p33 <= 0;
-
-      // end else
         if (shift_enable_delayed) begin
           p11 <= p12; 
           p12 <= p13;
@@ -351,69 +328,56 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   //      [-1  0  1]       [ 1  2  1]
 
   // Zero-extend to 11 bits to prevent overflow during addition
-  // wire signed [11:0] gx = (p13 + (p23 << 1) + p33) - (p11 + (p21 << 1) + p31);
-  // wire signed [11:0] gy = (p31 + (p32 << 1) + p33) - (p11 + (p12 << 1) + p13);
-
-  wire signed [11:0] gx = ($signed({1'b0, p13}) + $signed({1'b0, p23} << 1) + $signed({1'b0, p33})) 
-                      - ($signed({1'b0, p11}) + $signed({1'b0, p21} << 1) + $signed({1'b0, p31}));
-
-  wire signed [11:0] gy = ($signed({1'b0, p31}) + $signed({1'b0, p32} << 1) + $signed({1'b0, p33})) 
-                      - ($signed({1'b0, p11}) + $signed({1'b0, p12} << 1) + $signed({1'b0, p13}));
+  wire signed [11:0] gx = (p13 + (p23 << 1) + p33) - (p11 + (p21 << 1) + p31);
+  wire signed [11:0] gy = (p31 + (p32 << 1) + p33) - (p11 + (p12 << 1) + p13);
   
   wire [12:0] magnitude = (gx<0 ? -gx : gx) + (gy<0 ? -gy : gy);
 
-  wire isBorder = (s_lineCountReg <= 11'd1) || (s_pixelCountReg <= 11'd1); 
+  wire isBorder = (s_lineCountReg <= 11'd1) || (s_pixelCountReg <= 11'd6); 
 
-  wire [7:0] sobelActual = (magnitude > 13'd120) ? 8'hFF : 8'h00;
+  wire [7:0] sobelActual = (magnitude > 13'd60) ? 8'hFF : 8'h00;
 
   // Final Result: If on border, force black. Otherwise, use Sobel.
   wire [7:0] sobelResult = (isBorder) ? 8'h00 : sobelActual;
   // debug
   // wire [7:0] sobelResult = p23;
 
-
   // 4. Corrected Storage for the 4 results
   reg [7:0] sobelResult0, sobelResult1, sobelResult2, sobelResult3;
   always @(posedge pclk) begin
-      if (shift_enable_delayed) begin
           case (groupCount)
-              2'b00: sobelResult0 <= sobelResult;
-              2'b01: sobelResult1 <= sobelResult;
-              2'b10: sobelResult2 <= sobelResult;
-              2'b11: sobelResult3 <= sobelResult;
+              2'b01: sobelResult0 <= sobelResult;
+              2'b10: sobelResult1 <= sobelResult;
+              2'b11: sobelResult2 <= sobelResult;
+              2'b00: sobelResult3 <= sobelResult;
           endcase
-      end
   end
 
   wire [31:0] sobelPixelWord = {sobelResult3, sobelResult2, sobelResult1, sobelResult0};
 
   // =======================
 
-  
-  reg s_weLineBuffer_delayed;
+  // This is an ugly way of delaying by 3 cycles
+  reg s_weLineBuffer_delay1, s_weLineBuffer_delay2, s_weLineBuffer_delay3;
   reg [8:0] s_writeAddressReg;
-  // always @(posedge pclk) begin
-  //     // Delay the write enable by one cycle so the packed word is ready
-  //     s_weLineBuffer_delayed <= storage_delayed;
-  //     s_writeAddressReg <= s_pixelCountReg[10:3];
-  // end
 
   always @(posedge pclk) begin
       // Only write to the 2k RAM when we have finished packing all 4 pixels (groupCount 3)
-      s_weLineBuffer_delayed <= groupCount == 2'b11;
+      s_weLineBuffer_delay1 <= groupCount == 2'b11;
+      s_weLineBuffer_delay2 <= s_weLineBuffer_delay1;
+      s_weLineBuffer_delay3 <= s_weLineBuffer_delay2;
       
-      // The address must also be captured at this specific moment
       if (groupCount == 2'b11) begin
-          s_writeAddressReg <= s_pixelCountReg[10:3];
+          s_writeAddressReg <= s_pixelCountReg[10:3] - 1;
       end
   end
-
+  
 
   dualPortRam2k lineBuffer ( .address1(s_writeAddressReg),
                              .address2(s_busSelectReg),
                              .clock1(pclk),
                              .clock2(clock),
-                             .writeEnable(s_weLineBuffer_delayed),
+                             .writeEnable(s_weLineBuffer_delay3),
                              .dataIn1(sobelPixelWord),
                              .dataOut2(s_busPixelWord));
 
