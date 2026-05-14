@@ -60,10 +60,10 @@ read -sv ../../../modules/support/verilog/sram2048x8Dp.v
 
 # uncomment and comment the part for which exercicise you want to used
 ##############################################################
-# read -sv ../../../modules/camera/verilog/camera.v
+read -sv ../../../modules/camera/verilog/camera.v
 # read -sv ../../../modules/camera/verilog/camera_simple.v
 # read -sv ../../../modules/camera/verilog/camera_optimised.v
-read -sv ../../../modules/sobel/verilog/camera_optimised.v
+# read -sv ../../../modules/sobel/verilog/camera_optimised.v
 read -sv ../../../modules/sobel/verilog/ram640dp.v
 ##############################################################
 
