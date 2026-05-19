@@ -335,7 +335,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
 
   wire isBorder = (s_lineCountReg <= 11'd1) || (s_pixelCountReg <= 11'd6); 
 
-  wire [7:0] sobelActual = (magnitude > 13'd60) ? 8'hFF : 8'h00;
+  wire [7:0] sobelActual = (magnitude > 13'd128) ? 8'hFF : 8'h00;
 
   // Final Result: If on border, force black. Otherwise, use Sobel.
   wire [7:0] sobelResult = (isBorder) ? 8'h00 : sobelActual;
