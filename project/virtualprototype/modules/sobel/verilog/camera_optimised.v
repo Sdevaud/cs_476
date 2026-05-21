@@ -337,37 +337,28 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       end
   end
   
-  // Compute Sobel gradients
-  // Gx = [-1  0  1]  Gy = [-1 -2 -1]
-  //      [-2  0  2]       [ 0  0  0]
-  //      [-1  0  1]       [ 1  2  1]
+  // 4. compute sobel
+  wire [10:0] thresholdValue = {5'b00000, s_sobelThresholdReg};
+  wire [7:0] sobelResult;
 
-  // Extend so bitshift doesnt cause overflow
-  wire [8:0] p11e = {1'b0, p11};
-  wire [8:0] p12e = {1'b0, p12};
-  wire [8:0] p13e = {1'b0, p13};
-  wire [8:0] p21e = {1'b0, p21};
-  wire [8:0] p23e = {1'b0, p23};
-  wire [8:0] p31e = {1'b0, p31};
-  wire [8:0] p32e = {1'b0, p32};
-  wire [8:0] p33e = {1'b0, p33};
+  sobelCompute sobel (
+      .p11(p11),
+      .p12(p12),
+      .p13(p13),
+      .p21(p21),
+      .p23(p23),
+      .p31(p31),
+      .p32(p32),
+      .p33(p33),
 
-  wire signed [11:0] gx = (p13e + (p23e << 1) + p33e) - (p11e + (p21e << 1) + p31e);
-  wire signed [11:0] gy = (p31e + (p32e << 1) + p33e) - (p11e + (p12e << 1) + p13e);
-  
-  wire [12:0] magnitude = (gx<0 ? -gx : gx) + (gy<0 ? -gy : gy);
+      .s_lineCountReg(s_lineCountReg),
+      .s_pixelCountReg(s_pixelCountReg),
+      .thresholdValue(thresholdValue),
 
-  wire isBorder = (s_lineCountReg <= 11'd1) || (s_pixelCountReg <= 11'd6); 
-  wire [12:0] thresholdValue = {5'b00000, s_sobelThresholdReg}; // Zero-extend threshold to 13 bits
+      .sobelResult(sobelResult)
+  );
 
-  wire [7:0] sobelActual = (magnitude > thresholdValue) ? 8'hFF : 8'h00;
-
-  // Final Result: If on border, force black. Otherwise, use Sobel.
-  wire [7:0] sobelResult = (isBorder) ? 8'h00 : sobelActual;
-  // debug
-  // wire [7:0] sobelResult = p23;
-
-  // 4. Corrected Storage for the 4 results
+  // 5. Corrected Storage for the 4 results
   reg [7:0] sobelResult0, sobelResult1, sobelResult2, sobelResult3;
   always @(posedge pclk) begin
           case (groupCount)

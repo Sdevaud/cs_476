@@ -1,5 +1,19 @@
 `timescale 1ns/1ps
 
+/*
+iverilog -Wall -s tb_camera -o camera_tb \
+    ../camera_optimised.v \
+    ../ram2kdp.v \
+    ../ram640dp.v \
+    ../rgb565Grayscale.v \
+    ../rgb565ISE.v \
+    ../sobel.v \
+    camera_tb.v
+
+./camera_tb
+gtkwave simulation.vcd
+*/
+
 module tb_camera();
     // Signals
     reg clock = 0, pclk = 0, reset = 0;
