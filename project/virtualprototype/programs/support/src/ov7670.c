@@ -413,3 +413,8 @@ void disableContinues() {
   asm volatile ("l.nios_rrr r0,%[in1],%[in2],0x7"::[in1]"r"(6),[in2]"r"(0));
 }
 
+void setSobelThreshold(uint8_t threshold) {
+  uint32_t threshold_32 = threshold;
+  asm volatile ("l.nios_rrr r0,%[in1],%[in2],0x7"::[in1]"r"(9),[in2]"r"(threshold_32));
+}
+

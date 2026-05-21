@@ -34,6 +34,7 @@ int main () {
 #else
   vga[2] = swap_u32(2);
   vga[3] = swap_u32((uint32_t) &grayscale[0]);
+  setSobelThreshold(60);
   enableContinues((uint32_t) &grayscale[0]);
 #endif
   while(1) {}

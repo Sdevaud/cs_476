@@ -40,6 +40,8 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
    *     6        Start/stop image aquisition (ciValueb[1..0] = "01")
    *     6        Take single image (ciValueb[1..0] = "10")
    *     7        Read (self clearing): Single image grabbing done.
+   *     8        Read Sobel threshold
+   *     9        Write Sobel threshold (ciValueB[7..0])
    *
    */
 
@@ -94,9 +96,21 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   
   always @(posedge clock)
     begin
-      s_frameBufferBaseReg   <= (reset == 1'b1) ? 32'd0 : (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd5) ? {ciValueB[31:2],2'd0} : s_frameBufferBaseReg;
-      s_grabberActiveReg     <= (reset == 1'b1) ? 1'b0 : (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd6) ? ciValueB[0]& ~ciValueB[1] : s_grabberActiveReg;
-      s_grabberSingleShotReg <= (reset == 1'b1 || s_singleShotActionReg[0] == 1'b1) ? 1'b0 : (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd6) ? ciValueB[1]& ~ciValueB[0] : s_grabberSingleShotReg;
+      s_frameBufferBaseReg   <= (reset == 1'b1) ? 32'd0 : (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd5) ? {ciValueB[31:2],2'd0} : s_frameBufferBaseReg;
+      s_grabberActiveReg     <= (reset == 1'b1) ? 1'b0 : (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd6) ? ciValueB[0]& ~ciValueB[1] : s_grabberActiveReg;
+      s_grabberSingleShotReg <= (reset == 1'b1 || s_singleShotActionReg[0] == 1'b1) ? 1'b0 : (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd6) ? ciValueB[1]& ~ciValueB[0] : s_grabberSingleShotReg;
+    end
+
+  /* ==== Added by Till ====
+   *
+   * Here we add the threshold parameter used by the Sobel operator (default: 128)
+   *
+   */
+
+  reg [7:0] s_sobelThresholdReg;
+  always @(posedge clock)
+    begin
+      s_sobelThresholdReg <= (reset == 1'b1) ? 8'd128 : (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd9) ? ciValueB[7:0] : s_sobelThresholdReg;
     end
   
   /*
@@ -157,6 +171,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       4'd3    : s_selectedResult <= {24'd0,s_fpsCountValueReg};
       4'd4    : s_selectedResult <= s_frameBufferBaseReg;
       4'd7    : s_selectedResult <= {31'd0,s_singleShotDoneReg};
+      4'd8    : s_selectedResult <= {24'd0, s_sobelThresholdReg};
       default : s_selectedResult <= 32'd0;
     endcase
 
@@ -327,45 +342,18 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   //      [-2  0  2]       [ 0  0  0]
   //      [-1  0  1]       [ 1  2  1]
 
-  // Extended to 9 bits to prevent overflow during multiplication by 2 (left shift)
-  wire [8:0] p11e = {1'b0, p11};
-  wire [8:0] p12e = {1'b0, p12};
-  wire [8:0] p13e = {1'b0, p13};
-  wire [8:0] p21e = {1'b0, p21};
-  wire [8:0] p23e = {1'b0, p23};
-  wire [8:0] p31e = {1'b0, p31};
-  wire [8:0] p32e = {1'b0, p32};
-  wire [8:0] p33e = {1'b0, p33};
-
-  // Use signed arithmetic for gradient calculation to handle negative values
-  wire signed [10:0] gx =
-      $signed({1'b0, p13e}) +
-      $signed({1'b0, p23e, 1'b0}) +
-      $signed({1'b0, p33e}) -
-      $signed({1'b0, p11e}) -
-      $signed({1'b0, p21e, 1'b0}) -
-      $signed({1'b0, p31e});
-
-  // Use signed arithmetic for gradient calculation to handle negative values
-  wire signed [10:0] gy =
-      $signed({1'b0, p31e}) +
-      $signed({1'b0, p32e, 1'b0}) +
-      $signed({1'b0, p33e}) -
-      $signed({1'b0, p11e}) -
-      $signed({1'b0, p12e, 1'b0}) -
-      $signed({1'b0, p13e});
-
-  // Prevent overflow during addition of absolute values
-  wire [11:0] magnitude =
-      (gx < 0 ? -gx : gx) +
-      (gy < 0 ? -gy : gy);
+  wire signed [11:0] gx = (p13 + (p23 << 1) + p33) - (p11 + (p21 << 1) + p31);
+  wire signed [11:0] gy = (p31 + (p32 << 1) + p33) - (p11 + (p12 << 1) + p13);
+  
+  wire [12:0] magnitude = (gx<0 ? -gx : gx) + (gy<0 ? -gy : gy);
 
   wire isBorder = (s_lineCountReg <= 11'd1) || (s_pixelCountReg <= 11'd6); 
+  wire [12:0] thresholdValue = {5'b00000, s_sobelThresholdReg}; // Zero-extend threshold to 13 bits
 
-  wire [7:0] sobelActual = (magnitude > 12'd64) ? 8'hFF : 8'h00;
+  wire [7:0] sobelActual = (magnitude > thresholdValue) ? 8'hFF : 8'h00;
 
   // Final Result: If on border, force black. Otherwise, use Sobel.
-  assign sobelResult = (isBorder) ? 8'h00 : sobelActual;
+  wire [7:0] sobelResult = (isBorder) ? 8'h00 : sobelActual;
   // debug
   // wire [7:0] sobelResult = p23;
 
@@ -445,7 +433,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       s_busAddressReg        <= s_busAddressNext;
       s_grabberRunningReg    <= (reset == 1'b1) ? 1'b0 : (s_newScreen == 1'b1) ? s_grabberActiveReg : s_grabberRunningReg;
       s_singleShotActionReg  <= (reset == 1'b1 || s_singleShotActionReg[1] == 1'b1) ? 2'b0 : (s_newScreen == 1'b1) ? {1'b0,s_grabberSingleShotReg} : s_singleShotActionReg;
-      s_singleShotDoneReg    <= (reset == 1'b1 || (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd7)) ? 1'b1 : (s_singleShotActionReg[1] == 1'b1) ? 1'b1 : s_singleShotDoneReg;
+      s_singleShotDoneReg    <= (reset == 1'b1 || (s_isMyCi == 1'b1 && ciValueA[3:0] == 3'd7)) ? 1'b1 : (s_singleShotActionReg[1] == 1'b1) ? 1'b1 : s_singleShotDoneReg;
       s_stateMachineReg      <= (reset == 1'b1) ? IDLE : s_stateMachineNext;
       beginTransactionOut    <= (s_stateMachineReg == INIT_BURST1) ? 1'd1 : 1'd0;
       byteEnablesOut         <= (s_stateMachineReg == INIT_BURST1) ? 4'hF : 4'd0;

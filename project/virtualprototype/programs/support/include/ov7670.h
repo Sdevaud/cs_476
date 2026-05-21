@@ -23,5 +23,6 @@ void takeSingleImageNonBlocking(uint32_t framebuffer);
 void waitForNextImage();
 void enableContinues(uint32_t framebuffer);
 void disableContinues();
+void setSobelThreshold(uint8_t threshold);
 
 #endif
