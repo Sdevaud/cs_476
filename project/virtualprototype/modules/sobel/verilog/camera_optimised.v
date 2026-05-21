@@ -342,8 +342,18 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   //      [-2  0  2]       [ 0  0  0]
   //      [-1  0  1]       [ 1  2  1]
 
-  wire signed [11:0] gx = (p13 + (p23 << 1) + p33) - (p11 + (p21 << 1) + p31);
-  wire signed [11:0] gy = (p31 + (p32 << 1) + p33) - (p11 + (p12 << 1) + p13);
+  // Extend so bitshift doesnt cause overflow
+  wire [8:0] p11e = {1'b0, p11};
+  wire [8:0] p12e = {1'b0, p12};
+  wire [8:0] p13e = {1'b0, p13};
+  wire [8:0] p21e = {1'b0, p21};
+  wire [8:0] p23e = {1'b0, p23};
+  wire [8:0] p31e = {1'b0, p31};
+  wire [8:0] p32e = {1'b0, p32};
+  wire [8:0] p33e = {1'b0, p33};
+
+  wire signed [11:0] gx = (p13e + (p23e << 1) + p33e) - (p11e + (p21e << 1) + p31e);
+  wire signed [11:0] gy = (p31e + (p32e << 1) + p33e) - (p11e + (p12e << 1) + p13e);
   
   wire [12:0] magnitude = (gx<0 ? -gx : gx) + (gy<0 ? -gy : gy);
 
