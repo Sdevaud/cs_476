@@ -24,11 +24,11 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
                 output reg  [7:0]  burstSizeOut,
                 input wire         busyIn,
                                    busErrorIn);
-
-  /*
+                                   
+                                   /*
    *
    * this module provides an interface to the OV7670 camera module
-   *
+    *
    * different ci commands:
    * ciValueA:    Description:
    *     0        Read Nr. of Bytes per line
@@ -42,9 +42,9 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
    *     7        Read (self clearing): Single image grabbing done.
    *
    */
-  function integer clog2;
-    input integer value;
-    begin
+   function integer clog2;
+   input integer value;
+   begin
       for (clog2 = 0; value > 0 ; clog2= clog2 + 1)
       value = value >> 1;
     end
@@ -59,9 +59,9 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   localparam [2:0] END_TRANS1   = 3'd4;
   localparam [2:0] END_TRANS2   = 3'd5;
   
+  reg [1:0] s_singleShotActionReg;
   reg [2:0] s_stateMachineReg, s_stateMachineNext;
   reg s_singleShotDoneReg;
-  reg [1:0] s_singleShotActionReg;
   
   wire s_isMyCi = (ciN == customInstructionId) ? ciStart & ciCke : 1'b0;
   /*
@@ -81,17 +81,17 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       s_khzCountReg <= s_khzCountNext;
       s_hzCountReg  <= s_hzCountNext;
     end
-  
-  /*
-   *
+    
+    /*
+    *
    * Here we define the frame buffer parameters
    *
    */
-  reg[31:0] s_frameBufferBaseReg;
+   reg[31:0] s_frameBufferBaseReg;
   reg s_grabberActiveReg,s_grabberSingleShotReg;
   
   always @(posedge clock)
-    begin
+  begin
       s_frameBufferBaseReg   <= (reset == 1'b1) ? 32'd0 : (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd5) ? {ciValueB[31:2],2'd0} : s_frameBufferBaseReg;
       s_grabberActiveReg     <= (reset == 1'b1) ? 1'b0 : (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd6) ? ciValueB[0]& ~ciValueB[1] : s_grabberActiveReg;
       s_grabberSingleShotReg <= (reset == 1'b1 || s_singleShotActionReg[0] == 1'b1) ? 1'b0 : (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd6) ? ciValueB[1]& ~ciValueB[0] : s_grabberSingleShotReg;
@@ -220,9 +220,9 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       s_busAddressReg        <= s_busAddressNext;
       s_grabberRunningReg    <= (reset == 1'b1) ? 1'b0 : (s_newScreen == 1'b1) ? s_grabberActiveReg : s_grabberRunningReg;
       s_singleShotActionReg  <= (reset == 1'b1 || s_singleShotActionReg[1] == 1'b1) ? 2'b0 :
-      (s_newScreen == 1'b1) ? {s_singleShotActionReg[0],s_grabberSingleShotReg} : s_singleShotActionReg;
-      s_singleShotDoneReg    <= (reset == 1'b1 || (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd7 && ciValueB[1] == 1'b1 && ciValueB[0] == 1'b0)) ? 1'b0 : 
-                                (s_singleShotActionReg[1] == 1'b1) ? 1'b1 : s_singleShotDoneReg;
+      (s_newScreen == 1'b1) ? {1'b0,s_grabberSingleShotReg} : s_singleShotActionReg;
+      s_singleShotDoneReg    <= (reset == 1'b1 || (s_isMyCi == 1'b1 && ciValueA[2:0] == 3'd7)) ? 1'b1 :
+      (s_singleShotActionReg[1] == 1'b1) ? 1'b1 : s_singleShotDoneReg;
       s_stateMachineReg      <= (reset == 1'b1) ? IDLE : s_stateMachineNext;
       beginTransactionOut    <= (s_stateMachineReg == INIT_BURST1) ? 1'd1 : 1'd0;
       byteEnablesOut         <= (s_stateMachineReg == INIT_BURST1) ? 4'hF : 4'd0;

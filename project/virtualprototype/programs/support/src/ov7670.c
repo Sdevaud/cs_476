@@ -418,3 +418,8 @@ void setSobelThreshold(uint8_t threshold) {
   asm volatile ("l.nios_rrr r0,%[in1],%[in2],0x7"::[in1]"r"(9),[in2]"r"(threshold_32));
 }
 
+void setSobelMode(int mode) {
+  uint32_t mode_32 = mode;
+  asm volatile ("l.nios_rrr r0,%[in1],%[in2],0x7"::[in1]"r"(10),[in2]"r"(mode_32));
+}
+

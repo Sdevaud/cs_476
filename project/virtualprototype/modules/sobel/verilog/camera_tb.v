@@ -44,6 +44,10 @@ module tb_camera();
         #100 reset = 0;
         #100 hsync = 1;
         #100 hsync = 0;
+        
+        ciValueA = 32'd10; ciValueB = 32'd0; ciStart = 1; // activate sobel
+        #10 @(posedge clock);
+        ciStart = 0;
 
         // 2. Mock a Video Frame (4 lines, 16 pixels each)
         vsync = 1; #200; vsync = 0; // Start Frame
@@ -64,6 +68,7 @@ module tb_camera();
         #10 @(posedge clock);
         ciStart = 0;
         $display("CI Result (Pixel Count): %d", ciResult);
+
 
         #100 $finish;
     end

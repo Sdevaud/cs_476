@@ -24,5 +24,6 @@ void waitForNextImage();
 void enableContinues(uint32_t framebuffer);
 void disableContinues();
 void setSobelThreshold(uint8_t threshold);
+void setSobelMode(int mode);
 
 #endif
