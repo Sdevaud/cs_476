@@ -12,6 +12,21 @@
 #define BURST_SIZE (4<<10)
 #define STAT_CTRL (5<<10)
 
+void writeDMA(uint32_t address, uint32_t data) { // the ci ID is 0xA5 -> 165 in decimal
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],165" ::[in1] "r"(address | WRITE_OPERATION), [in2]"r"(data));
+}
+
+void readDMA(uint32_t address, uint32_t *data) {
+  asm volatile("l.nios_rrr %[out1],%[in1],r0,165" :[out1]"=r"(*data):[in1] "r"(address));
+}
+
+void waitForDMA() {
+  uint32_t data;
+  do {
+    readDMA(STAT_CTRL, &data);
+  } while (data & 1); // wait until the busy bit is zero
+}
+
 
 // Hough Configuration
 #define THETA_RES 180      // 0 to 180 degrees
@@ -50,32 +65,17 @@ int16_t getCos(int theta) {
 
 uint16_t accumulator[THETA_RES][RHO_RES];
 
-
-void writeDMA(uint32_t address, uint32_t data) { // the ci ID is 0xA5 -> 165 in decimal
-  asm volatile("l.nios_rrr r0,%[in1],%[in2],165" ::[in1] "r"(address | WRITE_OPERATION), [in2]"r"(data));
-}
-
-void readDMA(uint32_t address, uint32_t *data) {
-  asm volatile("l.nios_rrr %[out1],%[in1],r0,165" :[out1]"=r"(*data):[in1] "r"(address));
-}
-
-void calcRho(int xA, int yA, int thetaA, int xB, int yB, int thetaB, uint32_t *data) { // the ci ID is 0xA7 -> 167 in decimal
+void calcRho(int xA, int yA, int thetaA, uint8_t sobelA, int xB, int yB, int thetaB, uint8_t sobelB, uint32_t *data) { // the ci ID is 0xA7 -> 167 in decimal
   // Verilog definition:
   // wire [7:0] thetaA = valueA[7:0];
   // wire signed [9:0] xA = valueA[17:8];
   // wire signed [9:0] yA = valueA[27:18];
-  uint32_t valueA = thetaA | (xA << 8) | (yA << 18);
-  uint32_t valueB = thetaB | (xB << 8) | (yB << 18);
+  uint32_t valueA = thetaA | (xA << 8) | (yA << 18) | ((sobelA & 1) << 28);
+  uint32_t valueB = thetaB | (xB << 8) | (yB << 18) | ((sobelB & 1) << 28);
   asm volatile("l.nios_rrr %[out1],%[in1],%[in2],167" :[out1]"=r"(*data) :[in1] "r"(valueA), [in2]"r"(valueB));
 }
 
 
-void waitForDMA() {
-  uint32_t data;
-  do {
-    readDMA(STAT_CTRL, &data);
-  } while (data & 1); // wait until the busy bit is zero
-}
 
 
 uint8_t sobel[640*480];
@@ -98,7 +98,7 @@ int main () {
   printf("PCLK (kHz) : %d\n", camParams.pixelClockInkHz );
   printf("FPS        : %d\n", camParams.framesPerSecond );
   uint32_t grayPixels;
-  vga[2] = swap_u32(2);
+  vga[2] = swap_u32(2); // 2: 8bit pixels, 1: 16bit pixels
   vga[3] = swap_u32((uint32_t) &sobel[0]);
   setSobelThreshold(120);
   setSobelMode(1);
@@ -113,6 +113,92 @@ int main () {
   
   while(1) {
     takeSingleImageBlocking((uint32_t) &sobel[0]);
+
+
+    uint32_t bufferA = 0;
+    uint32_t bufferB = 256;
+    uint32_t pixels_rev = 0;
+
+    // Transfer first 512 pixels to CI buffer A
+    uint32_t pixel_block_addr = (uint32_t) &sobel[0];
+    writeDMA(BUS_START, pixel_block_addr);
+    writeDMA(MEMORY_START, bufferA);
+    writeDMA(BLOCK_SIZE, 256);
+    writeDMA(BURST_SIZE, 128);
+    writeDMA(STAT_CTRL, 1); // start transfer
+    waitForDMA();
+    writeDMA(STAT_CTRL, 0); // stop transfer
+
+
+    for (int t = 0; t < THETA_RES; t++) { // Iterate over every theta separately
+
+      for (int idx = 0; idx < 300; idx++) { // We process 1024 sobel (8bit) pixels at a time
+        pixel_block_addr = (uint32_t) &sobel[256*(idx+1)];
+
+        writeDMA(BUS_START, pixel_block_addr);
+        writeDMA(MEMORY_START, bufferB);
+        writeDMA(STAT_CTRL, 1); // start transfer bus -> ci
+
+        // Convert pixels from bufferA: read 2x 32-bit word (4x16 bit pixel)) -> convert to 1x 32-bit gray word
+        for (int pixelIdx = 0; pixelIdx < 256; pixelIdx++) {
+          readDMA(bufferA + pixelIdx, &pixels_rev); // This reads 1x32-bit word = 4x8-bit sobel pixel
+          uint32_t pixels = swap_u32(pixels_rev);
+
+          // Calculate Rho (1/2)
+          uint32_t rho_result;
+          int x1 = (1024*idx + 4*pixelIdx) % camParams.nrOfPixelsPerLine;
+          int y1 = (1024*idx + 4*pixelIdx) / camParams.nrOfPixelsPerLine;
+          int x2 = x1 + 1;
+          int y2 = y1;
+          uint8_t sobel1 = pixels & 0xFF;
+          uint8_t sobel2 = (pixels >> 8) & 0xFF;
+          calcRho(x1, y1, t, sobel1, x2, y2, t, sobel2, &rho_result);
+          int16_t rho1 = (rho_result >> 16) & 0xFFFF;
+          int16_t rho2 = rho_result & 0xFFFF;
+
+          // Calculate Rho (2/2)
+          int x3 = x2 + 1;
+          int y3 = y2;
+          int x4 = x3 + 1;
+          int y4 = y3;
+          uint8_t sobel3 = (pixels >> 16) & 0xFF;
+          uint8_t sobel4 = (pixels >> 24) & 0xFF;
+          calcRho(x3, y3, t, sobel3, x4, y4, t, sobel4, &rho_result);
+          int16_t rho3 = (rho_result >> 16) & 0xFFFF;
+          int16_t rho4 = rho_result & 0xFFFF;
+
+          /*
+          Idea: dont pack pixels in 300 little packets. Instead go through image line by line
+          (so 480 outer loop interations instead of 300). Then we save one line per side of the
+          ping pong buffer (which wont be full then but only hold 160 words per side instead of
+          256). Now for each line we read the pixels and accumulate the votes back in the dma buffer
+          (this will have the side effect that votes can only be 1 or 0, therefore horizontal lines 
+          cant be detected). This dma buffer is unloaded into the accumulator after each line. This 
+          probably cant be done directly (at least i dont see a way) so we first have to dump it into a
+          separate array in memory that can then be incremented onto the accumulator (No idea how slow
+          this will be).
+          */
+          writeDMA(bufferA + pixelIdx / 2, swap_u32(grayPixels));
+        }
+
+        waitForDMA();
+        writeDMA(STAT_CTRL, 0); // stop transfer
+
+        // Write the grayscale pixels to the output buffer
+        writeDMA(BUS_START, (uint32_t) &grayscale[512*idx]);
+        writeDMA(MEMORY_START, bufferA);
+        writeDMA(BLOCK_SIZE, 128);
+        writeDMA(STAT_CTRL, 2); // start transfer ci -> bus
+        waitForDMA();
+        writeDMA(STAT_CTRL, 0); // stop transfer
+
+        // Swap the buffers
+        bufferA = bufferA ^ 256; // XOR
+        bufferB = bufferB ^ 256;
+      }
+    }
+
+
     
     // Run Hough transform   
     // VERSION WITHOUT CI

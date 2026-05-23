@@ -38,8 +38,8 @@ module tb_hough_rho;
         start  = 0; #10;
 
 
-        valueA = {4'd0, 10'd50, 10'd100, 8'd90};  // xA=100
-        valueB = {4'd0, 10'd200, 10'd300, 8'd135}; // xB=300
+        valueA = {4'd1, 10'd50, 10'd100, 8'd90};  // xA=100
+        valueB = {4'd1, 10'd200, 10'd300, 8'd135}; // xB=300
         start  = 1; #10;
         $display("Test 2 (Th=0)     -> done: %b, rhoA: %0d, rhoB: %0d", done, result[31:16], $signed(result[15:0]));
         start  = 0; #10;
