@@ -43,49 +43,61 @@ int main () {
   setSobelMode(1);
   vga[2] = swap_u32(2);
   vga[3] = swap_u32((uint32_t) &grayscale[0]);
-  setSobelThreshold(60);
-  enableContinues((uint32_t) &grayscale[0]);
+  setSobelThreshold(120);
+  // enableContinues((uint32_t) &grayscale[0]);
 #endif
 
-printf("Starting streaming...\n" );
-delay_blocking_usec(4000000);
-printf("Streaming started!\n" );
+// delay_blocking_usec(4000000);
 
-printf("Switching to RGB...\n" );
-disableContinues();
-setSobelMode(0);
-vga[2] = swap_u32(1);
-vga[3] = swap_u32((uint32_t) &rgb565[0]);
-enableContinues((uint32_t) &rgb565[0]);
-delay_blocking_usec(4000000);
+// printf("Switching to RGB...\n" );
+// waitForNextImage();
+// disableContinues();
+// setSobelMode(0);
+// vga[2] = swap_u32(1);
+// vga[3] = swap_u32((uint32_t) &rgb565[0]);
+// enableContinues((uint32_t) &rgb565[0]);
 
-printf("Switching to Sobel...\n" );
-disableContinues();
-setSobelMode(1);
-vga[2] = swap_u32(2);
-vga[3] = swap_u32((uint32_t) &grayscale[0]);
-enableContinues((uint32_t) &grayscale[0]);
-delay_blocking_usec(4000000);
-printf("Done...\n" );
-
+// delay_blocking_usec(4000000);
 
 while(1) {
 
-  printf("Switching to RGB...\n" );
-  disableContinues();
-  setSobelMode(0);
-  vga[2] = swap_u32(1);
-  vga[3] = swap_u32((uint32_t) &rgb565[0]);
-  enableContinues((uint32_t) &rgb565[0]);
-  delay_blocking_usec(4000000);
+  // printf("Taking single SOBEL image...\n" );
+  // setSobelMode(1);
+  // vga[2] = swap_u32(2);
+  // vga[3] = swap_u32((uint32_t) &grayscale[0]);
+  // takeSingleImageBlocking((uint32_t) &grayscale[0]);
 
-  printf("Switching to Sobel...\n" );
+  // printf("Taking single RGB image...\n" );
+  // setSobelMode(0);
+  // vga[2] = swap_u32(1);
+  // vga[3] = swap_u32((uint32_t) &rgb565[0]);
+  // takeSingleImageBlocking((uint32_t) &rgb565[0]);
+
+
+
+
   disableContinues();
-  setSobelMode(1);
+
+  vga_clear();
   vga[2] = swap_u32(2);
   vga[3] = swap_u32((uint32_t) &grayscale[0]);
-  enableContinues((uint32_t) &grayscale[0]);
-  delay_blocking_usec(4000000);
+  vga_clear();
+
+  printf("Taking single SOBEL image...\n" );
+  setSobelMode(1);
+  takeSingleImageBlocking((uint32_t) &grayscale[0]);
+
+  setSobelMode(0);
+  enableContinues((uint32_t) &rgb565[0]);
+
+  delay_blocking_usec(500000);
+
+  printf("Streaming RGB...\n" );
+  vga_clear();
+  vga[2] = swap_u32(1);
+  vga[3] = swap_u32((uint32_t) &rgb565[0]);
+  vga_clear();
+  delay_blocking_usec(500000);
 
   }
 }

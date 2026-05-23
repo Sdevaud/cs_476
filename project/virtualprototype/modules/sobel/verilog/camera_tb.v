@@ -45,9 +45,10 @@ module tb_camera();
         #100 hsync = 1;
         #100 hsync = 0;
         
-        ciValueA = 32'd10; ciValueB = 32'd0; ciStart = 1; // activate sobel
+        ciValueA = 32'd10; ciValueB = 32'd1; ciStart = 1; // activate sobel
         #10 @(posedge clock);
         ciStart = 0;
+        #100 @(posedge clock);
 
         // 2. Mock a Video Frame (4 lines, 16 pixels each)
         vsync = 1; #200; vsync = 0; // Start Frame
@@ -60,7 +61,24 @@ module tb_camera();
             hsync = 0;
             #500; // Gap between lines
         end
-        
+        vsync = 1; #200; vsync = 0; // Start Frame
+
+
+        ciValueA = 32'd6; ciValueB = 32'd2; ciStart = 1; // activate single shot
+        #10 @(posedge clock);
+        ciStart = 0;
+
+
+        repeat (4) begin : line_loop2
+            #100 hsync = 1;
+            repeat (32) begin : pixel_loop
+                @(posedge pclk) camData = camData + 1; // Fake pixel data
+            end
+            hsync = 0;
+            #500; // Gap between lines
+        end
+        vsync = 1; #200; vsync = 0; // Start Frame
+
         #1000;
         
         // 3. Test Custom Instruction: Read Pixel Count (ciValueA = 0)

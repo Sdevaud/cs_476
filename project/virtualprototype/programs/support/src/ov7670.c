@@ -423,3 +423,9 @@ void setSobelMode(int mode) {
   asm volatile ("l.nios_rrr r0,%[in1],%[in2],0x7"::[in1]"r"(10),[in2]"r"(mode_32));
 }
 
+uint32_t pollSingleShotDone() {
+  uint32_t result;
+  asm volatile ("l.nios_rrc %[out1],%[in1],r0,0x7":[out1]"=r"(result):[in1]"r"(7));
+  return result;
+}
+
