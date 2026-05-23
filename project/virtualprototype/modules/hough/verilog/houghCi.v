@@ -1,4 +1,4 @@
-module hough_rho #(parameter [7:0] customInstructionId = 8'hA7 )
+module houghCi #(parameter [7:0] customInstructionId = 8'hA7 )
                            (
                              input wire         start,
                              input wire [31:0]  valueA,

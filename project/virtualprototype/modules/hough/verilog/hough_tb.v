@@ -9,7 +9,7 @@ module tb_hough_rho;
     wire [31:0] result;
 
     // Instantiate UUT
-    hough_rho #(.customInstructionId(8'hA7)) uut (
+    houghCi #(.customInstructionId(8'hA7)) uut (
         .start(start), .valueA(valueA), .valueB(valueB),
         .iseId(iseId), .done(done), .result(result)
     );

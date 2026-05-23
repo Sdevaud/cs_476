@@ -322,7 +322,7 @@ module or1420SingleCore ( input wire         clock12MHz,
    * Here we instantiate the CPU
    *
    */
-  wire [31:0] s_cpu1CiResult, s_grayResult, s_ramDmaResult;
+  wire [31:0] s_cpu1CiResult, s_grayResult, s_houghResult, s_ramDmaResult;
   wire [31:0] s_cpu1CiDataA, s_cpu1CiDataB, s_camCiResult, s_delayResult;
   wire [7:0]  s_cpu1CiN;
   wire        s_cpu1CiRa, s_cpu1CiRb, s_cpu1CiRc, s_cpu1CiStart, s_cpu1CiCke, s_cpu1CiDone, s_i2cCiDone, s_delayCiDone;
@@ -334,11 +334,11 @@ module or1420SingleCore ( input wire         clock12MHz,
   wire [3:0]  s_cpu1byteEnables;
   wire        s_cpu1DataValid;
   wire [7:0]  s_cpu1BurstSize;
-  wire        s_spm1Irq, s_grayDone, s_profileDone, s_stall;
+  wire        s_spm1Irq, s_grayDone, s_houghDone, s_profileDone, s_stall;
   
-  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_grayDone | s_profileDone |
+  assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_grayDone | s_houghDone | s_profileDone |
                         s_ramDmaDone;
-  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_grayResult |  
+  assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_grayResult | s_houghResult |  
                           s_profileResult | s_ramDmaResult; 
 
   or1420Top #( .NOP_INSTRUCTION(32'h1500FFFF)) cpu1
@@ -458,6 +458,19 @@ module or1420SingleCore ( input wire         clock12MHz,
                        .iseId(s_cpu1CiN),
                        .done(s_grayDone),
                        .result(s_grayResult) );
+
+  /*
+   *
+   * Hough transform CI
+   *
+   */
+  houghCi #(.customInstructionId(8'hA7)) hough
+                      (.start(s_cpu1CiStart),
+                       .valueA(s_cpu1CiDataA),
+                       .valueB(s_cpu1CiDataB),
+                       .iseId(s_cpu1CiN),
+                       .done(s_houghDone),
+                       .result(s_houghResult) );
 
   /*
    *
