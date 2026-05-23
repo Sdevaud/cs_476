@@ -20,7 +20,8 @@
 #define SCALE_RHO 4 // Scale factor to fit rho into accumulator
 #define PI 3.14159265
 
-uint16_t accumulator[THETA_RES][RHO_RES];
+
+
 
 const int16_t sinLUT[180] = {
     0, 4, 8, 13, 17, 22, 26, 31, 35, 40, 44, 48, 53, 57, 61, 66, 70, 74, 79, 83,
@@ -43,6 +44,11 @@ int16_t getCos(int theta) {
     if (theta < 90) return sinLUT[90 - theta]; 
     return -sinLUT[theta - 90];
 }
+
+
+
+
+uint16_t accumulator[THETA_RES][RHO_RES];
 
 
 void writeDMA(uint32_t address, uint32_t data) { // the ci ID is 0xA5 -> 165 in decimal
@@ -72,8 +78,6 @@ void waitForDMA() {
 }
 
 
-uint16_t rgb565[640*480];
-uint8_t grayscale[640*480];
 uint8_t sobel[640*480];
 
 int main () {
@@ -96,123 +100,22 @@ int main () {
   uint32_t grayPixels;
   vga[2] = swap_u32(2);
   vga[3] = swap_u32((uint32_t) &sobel[0]);
+  setSobelThreshold(120);
+  setSobelMode(1);
+
+  // 1. Clear the Accumulator
+  for (int t = 0; t < THETA_RES; t++) {
+      for (int r = 0; r < RHO_RES; r++) {
+          accumulator[t][r] = 0;
+      }
+  }
 
   
   while(1) {
-    uint32_t* gray = (uint32_t*) &grayscale[0];
-    uint32_t* rgb = (uint32_t*) &rgb565[0];
-    takeSingleImageBlocking((uint32_t) &rgb565[0]);
-
-    uint32_t bufferA = 0;
-    uint32_t bufferB = 256;
-    uint32_t pixel1 = 0;
-    uint32_t pixel2 = 0;
-
-    // Transfer first 512 pixels to CI buffer A
-    uint32_t pixel_block_addr = (uint32_t) &rgb[0];
-    writeDMA(BUS_START, pixel_block_addr);
-    writeDMA(MEMORY_START, bufferA);
-    writeDMA(BLOCK_SIZE, 256);
-    writeDMA(BURST_SIZE, 128);
-    writeDMA(STAT_CTRL, 1); // start transfer
-    waitForDMA();
-    writeDMA(STAT_CTRL, 0); // stop transfer
-
-    for (int idx = 0; idx < 599; idx++) {
-      pixel_block_addr = (uint32_t) &rgb[256*(idx+1)];
-
-      writeDMA(BUS_START, pixel_block_addr);
-      writeDMA(MEMORY_START, bufferB);
-      writeDMA(BLOCK_SIZE, 256);
-      writeDMA(STAT_CTRL, 1); // start transfer bus -> ci
-
-      // Convert pixels from bufferA: read 2x 32-bit word (4x16 bit pixel)) -> convert to 1x 32-bit gray word
-      for (int pixelIdx = 0; pixelIdx < 256; pixelIdx += 2) {
-        readDMA(bufferA + pixelIdx, &pixel1);
-        readDMA(bufferA + pixelIdx + 1, &pixel2);
-
-        // Swap order because different endianess of CPU and DMA
-        uint32_t pixel1Reversed = swap_u32(pixel1);
-        uint32_t pixel2Reversed = swap_u32(pixel2);
-        asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel1Reversed),[in2]"r"(pixel2Reversed));
-        writeDMA(bufferA + pixelIdx / 2, swap_u32(grayPixels));
-      }
-
-      waitForDMA();
-      writeDMA(STAT_CTRL, 0); // stop transfer
-
-      // Write the grayscale pixels to the output buffer
-      writeDMA(BUS_START, (uint32_t) &grayscale[512*idx]);
-      writeDMA(MEMORY_START, bufferA);
-      writeDMA(BLOCK_SIZE, 128);
-      writeDMA(STAT_CTRL, 2); // start transfer ci -> bus
-      waitForDMA();
-      writeDMA(STAT_CTRL, 0); // stop transfer
-
-      // Swap the buffers
-      bufferA = bufferA ^ 256; // XOR
-      bufferB = bufferB ^ 256;
-    }
-
-    // Process the last chunk (bufferB), since we have already swapped addresses in the loop we must now use bufferA
-    for (int pixelIdx = 0; pixelIdx < 256; pixelIdx += 2) {
-      readDMA(bufferA + pixelIdx, &pixel1);
-      readDMA(bufferA + pixelIdx + 1, &pixel2);
-
-      uint32_t pixel1Reversed = swap_u32(pixel1);
-      uint32_t pixel2Reversed = swap_u32(pixel2);
-      asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],10":[out1]"=r"(grayPixels):[in1]"r"(pixel1Reversed),[in2]"r"(pixel2Reversed));
-      writeDMA(bufferA + pixelIdx / 2, swap_u32(grayPixels));
-    }
+    takeSingleImageBlocking((uint32_t) &sobel[0]);
     
-    writeDMA(BUS_START, (uint32_t) &grayscale[512*599]);
-    writeDMA(MEMORY_START, bufferA);
-    writeDMA(BLOCK_SIZE, 128);
-    writeDMA(STAT_CTRL, 2); // start transfer ci -> bus
-    waitForDMA();
-    writeDMA(STAT_CTRL, 0); // stop transfer
-
-
-
-    for (int line = 0; line < camParams.nrOfLinesPerImage; line++) {
-      for (int pixel = 0; pixel < camParams.nrOfPixelsPerLine; pixel++) {
-        int index = line * camParams.nrOfPixelsPerLine + pixel;
-
-        if (line == 0 || pixel == 0 ||
-            line == camParams.nrOfLinesPerImage - 1 ||
-            pixel == camParams.nrOfPixelsPerLine - 1) {
-          sobel[index] = 0;
-          continue;
-        }
-
-        int gx = -grayscale[(line - 1) * camParams.nrOfPixelsPerLine + (pixel - 1)]
-                 - 2 * grayscale[line * camParams.nrOfPixelsPerLine + (pixel - 1)]
-                 - grayscale[(line + 1) * camParams.nrOfPixelsPerLine + (pixel - 1)]
-                 + grayscale[(line - 1) * camParams.nrOfPixelsPerLine + (pixel + 1)]
-                 + 2 * grayscale[line * camParams.nrOfPixelsPerLine + (pixel + 1)]
-                 + grayscale[(line + 1) * camParams.nrOfPixelsPerLine + (pixel + 1)];
-
-        int gy = -grayscale[(line - 1) * camParams.nrOfPixelsPerLine + (pixel - 1)]
-                 - 2 * grayscale[(line - 1) * camParams.nrOfPixelsPerLine + pixel]
-                 - grayscale[(line - 1) * camParams.nrOfPixelsPerLine + (pixel + 1)]
-                 + grayscale[(line + 1) * camParams.nrOfPixelsPerLine + (pixel - 1)]
-                 + 2 * grayscale[(line + 1) * camParams.nrOfPixelsPerLine + pixel]
-                 + grayscale[(line + 1) * camParams.nrOfPixelsPerLine + (pixel + 1)];
-
-        int magnitude = (gx < 0 ? -gx : gx) + (gy < 0 ? -gy : gy);
-        sobel[index] = (magnitude > 128) ? 255 : 0;
-      }
-    }
-    
-    
-    // Run Hough transform
-    // 1. Clear the Accumulator
-    for (int t = 0; t < THETA_RES; t++) {
-        for (int r = 0; r < RHO_RES; r++) {
-            accumulator[t][r] = 0;
-        }
-    }
-
+    // Run Hough transform   
+    // VERSION WITHOUT CI
     // 2. Voting Process
     // We iterate through every pixel. If it's an edge (Sobel > 0), it votes.
     for (int y = 0; y < camParams.nrOfLinesPerImage; y++) {
@@ -226,19 +129,49 @@ int main () {
               int cosVal = getCos(theta);
               int sinVal = sinLUT[theta];
               int rho = (int)(x * cosVal + y * sinVal) >> 8;
-
+              
               int rho_idx = (rho + MAX_RHO) / SCALE_RHO; 
 
               if (rho_idx >= 0) {
                   accumulator[theta][rho_idx]++;
               }
 
+            }
           }
-      }
-    }
+        }
+
+    
+    // VERSION WITH CI
+    // 2. Voting Process
+    // We iterate through two pixels at a time. If either is an edge (Sobel > 0),
+    // for (int y = 0; y < camParams.nrOfLinesPerImage; y++) {
+    //     for (int x = 0; x < camParams.nrOfPixelsPerLine; x += 2) {
+    //         if (!(sobel[y * camParams.nrOfPixelsPerLine + x] > 0) && !(sobel[y * camParams.nrOfPixelsPerLine + x + 1] > 0)) {
+    //             continue; // Neither pixel is an edge, skip
+    //         }
+                
+    //       // For every edge pixel, calculate rho for all possible thetas
+    //       for (int theta = 0; theta < THETA_RES; theta++) {
+    //           uint32_t rho_result;
+    //           calcRho(x, y, theta, x+1, y, theta, &rho_result);
+    //           int16_t rhoA = (rho_result >> 16) & 0xFFFF;
+    //           int16_t rhoB = rho_result & 0xFFFF;
+
+    //           int rhoA_idx = (rhoA + MAX_RHO) / SCALE_RHO; 
+    //           int rhoB_idx = (rhoB + MAX_RHO) / SCALE_RHO; 
+
+    //           if (rhoA_idx >= 0) {
+    //               accumulator[theta][rhoA_idx]++;
+    //           }
+    //           if (rhoB_idx >= 0) {
+    //               accumulator[theta][rhoB_idx]++;
+    //           }
+    //         }
+    //       }
+    //     }
 
     // 3. Peak Detection (Finding the lines)
-    uint16_t threshold = 500; // Minimum votes to be considered a line
+    uint16_t threshold = 250; // Minimum votes to be considered a line
     int num_lines = 0;
     int top_lines[5] = {0}; // Array to store the top 5 votes
     int top_theta[5] = {0}; // Array to store the corresponding theta values (indices)
@@ -246,7 +179,9 @@ int main () {
 
     for (int t = 0; t < THETA_RES; t++) {
         for (int r = 0; r < RHO_RES; r++) {
-            if (!(accumulator[t][r] > 400)) {
+          uint16_t acc_value = accumulator[t][r];
+          acc_value = 0; // Clear accumulator after reading its value
+            if (!(acc_value > threshold)) {
                 continue; // Not a line, skip
             }
             
@@ -262,8 +197,8 @@ int main () {
 
               if (dt <= 1 || dr <= 1) {
                 // Considered duplicate/nearby: merge by keeping the larger vote
-                if (accumulator[t][r] > top_lines[j]) {
-                  top_lines[j] = accumulator[t][r];
+                if (acc_value > top_lines[j]) {
+                  top_lines[j] = acc_value;
                   top_theta[j] = t;
                   top_rho_idx[j] = r;
                 }
@@ -275,7 +210,7 @@ int main () {
 
             // Insert into top 5 if applicable (normal insertion)
             for (int i = 0; i < 5; i++) {
-              if (accumulator[t][r] > top_lines[i]) {
+              if (acc_value > top_lines[i]) {
                 // Shift lower entries
                 for (int j = 4; j > i; j--) {
                   top_lines[j] = top_lines[j - 1];
@@ -283,7 +218,7 @@ int main () {
                   top_rho_idx[j] = top_rho_idx[j - 1];
                 }
                 // Insert new entry
-                top_lines[i] = accumulator[t][r];
+                top_lines[i] = acc_value;
                 top_theta[i] = t;
                 top_rho_idx[i] = r;
                 break;
