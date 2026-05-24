@@ -1,8 +1,8 @@
 `timescale 1ns/1ps
 
 /*
-iverilog -Wall -s tb_camera -o camera_tb \
-    ../camera_optimised.v \
+iverilog -Wall -s tb_camera_sobel -o camera_tb \
+    ../camera_sobel.v \
     ../ram2kdp.v \
     ../ram640dp.v \
     ../rgb565Grayscale.v \
