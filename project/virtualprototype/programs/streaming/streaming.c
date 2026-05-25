@@ -36,18 +36,18 @@ void waitDMAGray() {
   } while (data & 1); // wait until the busy bit is zero
 }
 
-void extract_4pixel_line1xline2(const uint32_t* line1, const uint32_t* line2, uint32_t* grayPixelOut) {
+void concatenate_line1xline2(const uint32_t* line1, const uint32_t* line2, uint32_t* grayPixelOut) {
   asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],31":[out1]"=r"(*grayPixelOut):[in1]"r"(*line1),[in2]"r"(*line2));
 }
-void extract_4pixel_line2xline3(const uint32_t* line2, const uint32_t* line3, uint32_t* grayPixelOut) {
+void concatenate_line2xline3(const uint32_t* line2, const uint32_t* line3, uint32_t* grayPixelOut) {
   asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],32":[out1]"=r"(*grayPixelOut):[in1]"r"(*line2),[in2]"r"(*line3));
 }
 
-void sobel_ci(const uint32_t* grayPixel1, const uint32_t* grayPixel2, uint8_t* sobelPixel) {
+void sobel_ci(const uint32_t* grayPixel1, const uint32_t* grayPixel2, uint32_t* sobelPixel) {
   asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],30":[out1]"=r"(*sobelPixel):[in1]"r"(*grayPixel1),[in2]"r"(*grayPixel2));
 }
 
-void edge_detection(const uint8_t* sobelPixel, uint8_t* houghPixel) {
+void edge_detection(const uint32_t* sobelPixel, uint32_t* houghPixel) {
   asm volatile("l.nios_rrr %[out1],%[in1],r0,33" :[out1]"=r"(*houghPixel):[in1] "r"(*sobelPixel));
 }
 
@@ -117,8 +117,8 @@ int main () {
     uint32_t linePixel2 = 0;
     uint32_t linePixel3 = 0;
 
-    uint8_t sobelPixel = 0;
-    uint8_t houghPixel = 0;
+    uint32_t sobelPixel = 0;
+    uint32_t houghPixel = 0;
 
     /* Load first 3 lines with DMA*/
     for (uint32_t loop = 0; loop < 3; ++loop) {
@@ -146,8 +146,8 @@ int main () {
           readDMAGray(sobelBuffer3 + pixel , &linePixel2);
           readDMAGray(sobelBuffer4 + pixel, &linePixel3);
 
-          extract_4pixel_line1xline2(&linePixel1, &linePixel2, &package4Pixel1);
-          extract_4pixel_line2xline3(&linePixel2, &linePixel3, &package4Pixel2);
+          concatenate_line1xline2(&linePixel1, &linePixel2, &package4Pixel1);
+          concatenate_line2xline3(&linePixel2, &linePixel3, &package4Pixel2);
 
           sobel_ci(&package4Pixel1, &package4Pixel2, &sobelPixel);
           edge_detection(&sobelPixel, &houghPixel);
