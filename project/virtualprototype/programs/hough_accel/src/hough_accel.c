@@ -29,7 +29,8 @@ void waitForDMA() {
 
 
 // Hough Configuration
-#define THETA_RES 180      // 0 to 180 degrees
+#define THETA_RES 3      // 0 to 180 degrees
+#define N_THETA (int)(180 / THETA_RES)
 #define RHO_RES 200        // Adjust based on image diagonal
 #define MAX_RHO 800
 #define SCALE_RHO 4 // Scale factor to fit rho into accumulator
@@ -63,19 +64,50 @@ int16_t getCos(int theta) {
 
 
 
-uint16_t accumulator[THETA_RES][RHO_RES];
+uint16_t accumulator[N_THETA][RHO_RES];
+uint16_t line_accumulator [RHO_RES]; // This is what we fill up repeatedly with the DMA and unload into the big accumulator
 
-void calcRho(int xA, int yA, int thetaA, uint8_t sobelA, int xB, int yB, int thetaB, uint8_t sobelB, uint32_t *data) { // the ci ID is 0xA7 -> 167 in decimal
-  // Verilog definition:
-  // wire [7:0] thetaA = valueA[7:0];
-  // wire signed [9:0] xA = valueA[17:8];
-  // wire signed [9:0] yA = valueA[27:18];
-  uint32_t valueA = thetaA | (xA << 8) | (yA << 18) | ((sobelA & 1) << 28);
-  uint32_t valueB = thetaB | (xB << 8) | (yB << 18) | ((sobelB & 1) << 28);
-  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],167" :[out1]"=r"(*data) :[in1] "r"(valueA), [in2]"r"(valueB));
+inline uint32_t calcRho(int theta, int y, int xA, uint8_t sobelA, uint8_t sobelB, uint8_t sobelC, uint8_t sobelD) {
+  // valueA [0:31] = {theta(8bit), y(10bit), x1(10bit),
+  //      sobelBin1(1bit), sobelBin2(1bit), sobelBin3(1bit), sobelBin4(1bit)}
+  // valueB [0:31] = {x2(10bit), x3(10bit), x4(10bit), reserved(2bit)}
+  uint32_t valueA = theta | (y << 8) | (xA << 18) |
+    ((sobelA & 1) << 28 | (sobelB & 1) << 29 | (sobelC & 1) << 30 | (sobelD & 1) << 31);
+  uint32_t valueB = (xA+2) | ((xA+4) << 10) | ((xA+6) << 20);
+
+  uint32_t result;
+
+  // the ci ID is 0xA7 -> 167 in decimal
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],167" :[out1]"=r"(result) :[in1] "r"(valueA), [in2]"r"(valueB));
+
+  // int cosVal = getCos(theta);
+  // int sinVal = sinLUT[theta];
+  // int rhoLeft = (int)(xA * cosVal + y * sinVal) >> 8;
+  // int rhoRight = (int)((xA + 2) * cosVal + y * sinVal) >> 8;
+
+  // int rhoLeft_scaled = (rhoLeft + MAX_RHO) / SCALE_RHO; 
+  // int rhoRight_scaled = (rhoRight + MAX_RHO) / SCALE_RHO; 
+
+  // data[0] = (rhoLeft_scaled << 16) | rhoRight_scaled; // Return both rhos in one 32-bit word for simplicity
+
+  return result;
 }
 
+inline void voteHoughCi(int theta, int y, int xA, uint8_t sobelA, uint8_t sobelB, uint8_t sobelC, uint8_t sobelD) {
+  uint32_t valueA = theta | (y << 8) | (xA << 18) |
+    ((sobelA & 1) << 28 | (sobelB & 1) << 29 | (sobelC & 1) << 30 | (sobelD & 1) << 31);
+  uint32_t valueB = (xA+2) | ((xA+4) << 10) | ((xA+6) << 20);
 
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],167" ::[in1] "r"(valueA), [in2]"r"(valueB));
+}
+
+inline void incrementAccumulator(int theta_idx, int rho_idx) {
+  uint32_t voteCount;
+  // Read vote count from CI memory
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],167" :[out1]"=r"(voteCount) :[in1] "r"(rho_idx), [in2]"r"(1<<31));
+  accumulator[theta_idx][rho_idx] += voteCount;
+}
+  
 
 
 uint8_t sobel[640*480];
@@ -85,6 +117,19 @@ int main () {
   volatile unsigned int *vga = (unsigned int *) 0X50000020;
   camParameters camParams;
   vga_clear();
+
+
+  // test calc rho CI
+  uint32_t rho_result;
+  rho_result = calcRho(0, 20, 40, 1, 1, 1, 0);
+  uint8_t rhoA = (rho_result >> 24) & 0xFF;
+  uint8_t rhoB = (rho_result >> 16) & 0xFF;
+  uint8_t rhoC = (rho_result >> 8) & 0xFF;
+  uint8_t rhoD = rho_result & 0xFF;
+  printf("Test calcRho CI: rhoA=%d, rhoB=%d\n", rhoA, rhoB);
+  printf("Test calcRho CI: rhoC=%d, rhoD=%d\n", rhoC, rhoD);
+  printf("Raw result: 0x%08X\n", rho_result);
+
   
   printf("Initialising camera (this takes up to 3 seconds)!\n" );
   camParams = initOv7670(VGA);
@@ -104,7 +149,7 @@ int main () {
   setSobelMode(1);
 
   // 1. Clear the Accumulator
-  for (int t = 0; t < THETA_RES; t++) {
+  for (int t = 0; t < N_THETA; t++) {
       for (int r = 0; r < RHO_RES; r++) {
           accumulator[t][r] = 0;
       }
@@ -116,56 +161,114 @@ int main () {
 
 
     uint32_t bufferA = 0;
-    uint32_t bufferB = 256;
-    uint32_t pixels_rev = 0;
+    uint32_t bufferB = 320;
+    uint32_t voteBuffer = 640;
+    uint32_t pixels_top_rev = 0;
+    uint32_t pixels_bot_rev = 0;
 
-    // Transfer first 512 pixels to CI buffer A
-    uint32_t pixel_block_addr = (uint32_t) &sobel[0];
-    writeDMA(BUS_START, pixel_block_addr);
-    writeDMA(MEMORY_START, bufferA);
-    writeDMA(BLOCK_SIZE, 256);
-    writeDMA(BURST_SIZE, 128);
-    writeDMA(STAT_CTRL, 1); // start transfer
-    waitForDMA();
-    writeDMA(STAT_CTRL, 0); // stop transfer
+    for (int t = 0; t < N_THETA; t++) { // Iterate over every theta separately
+      // Transfer first 1280 pixels to CI buffer A
+      uint32_t pixel_block_addr = (uint32_t) &sobel[0];
+      writeDMA(BUS_START, pixel_block_addr);
+      writeDMA(MEMORY_START, bufferA);
+      writeDMA(BLOCK_SIZE, 320); // 320 words = 1280 pixels = 2 lines
+      writeDMA(BURST_SIZE, 80);
+      writeDMA(STAT_CTRL, 1); // start transfer
+      waitForDMA();
+      writeDMA(STAT_CTRL, 0); // stop transfer
 
-
-    for (int t = 0; t < THETA_RES; t++) { // Iterate over every theta separately
-
-      for (int idx = 0; idx < 300; idx++) { // We process 1024 sobel (8bit) pixels at a time
-        pixel_block_addr = (uint32_t) &sobel[256*(idx+1)];
+      int cosVal = getCos(THETA_RES * t);
+      int sinVal = sinLUT[THETA_RES * t];
+      
+      for (int y = 0; y < 478; y+=2) { // We process 1280 sobel (8bit) pixels at a time (two lines)
+        pixel_block_addr = (uint32_t) &sobel[160*(y+2)];
 
         writeDMA(BUS_START, pixel_block_addr);
         writeDMA(MEMORY_START, bufferB);
         writeDMA(STAT_CTRL, 1); // start transfer bus -> ci
+        
+        uint8_t rhoMax;
+        for (int wordIdx = 0; wordIdx < 160; wordIdx++) {
+          readDMA(bufferA + wordIdx, &pixels_top_rev); // This reads 1x32-bit word = 4x8-bit sobel pixel
+          readDMA(bufferA + 160 + wordIdx, &pixels_bot_rev);
+          uint32_t pixels_top = swap_u32(pixels_top_rev);
+          uint32_t pixels_bot = swap_u32(pixels_bot_rev);
 
-        // Convert pixels from bufferA: read 2x 32-bit word (4x16 bit pixel)) -> convert to 1x 32-bit gray word
-        for (int pixelIdx = 0; pixelIdx < 256; pixelIdx++) {
-          readDMA(bufferA + pixelIdx, &pixels_rev); // This reads 1x32-bit word = 4x8-bit sobel pixel
-          uint32_t pixels = swap_u32(pixels_rev);
-
-          // Calculate Rho (1/2)
+          // Calculate Rho, lower resolution for rho (4 pixels counted as one)
           uint32_t rho_result;
-          int x1 = (1024*idx + 4*pixelIdx) % camParams.nrOfPixelsPerLine;
-          int y1 = (1024*idx + 4*pixelIdx) / camParams.nrOfPixelsPerLine;
-          int x2 = x1 + 1;
-          int y2 = y1;
-          uint8_t sobel1 = pixels & 0xFF;
-          uint8_t sobel2 = (pixels >> 8) & 0xFF;
-          calcRho(x1, y1, t, sobel1, x2, y2, t, sobel2, &rho_result);
-          int16_t rho1 = (rho_result >> 16) & 0xFFFF;
-          int16_t rho2 = rho_result & 0xFFFF;
+          int xLeft = 4*wordIdx+1;
+          uint8_t sobelT1 = pixels_top & 0xFF;
+          uint8_t sobelT2 = (pixels_top >> 8) & 0xFF;
+          uint8_t sobelB1 = pixels_bot & 0xFF;
+          uint8_t sobelB2 = (pixels_bot >> 8) & 0xFF;
+          uint16_t sobelLeft = sobelT1 | sobelT2 | sobelB1 | sobelB2;
 
-          // Calculate Rho (2/2)
-          int x3 = x2 + 1;
-          int y3 = y2;
-          int x4 = x3 + 1;
-          int y4 = y3;
-          uint8_t sobel3 = (pixels >> 16) & 0xFF;
-          uint8_t sobel4 = (pixels >> 24) & 0xFF;
-          calcRho(x3, y3, t, sobel3, x4, y4, t, sobel4, &rho_result);
-          int16_t rho3 = (rho_result >> 16) & 0xFFFF;
-          int16_t rho4 = rho_result & 0xFFFF;
+          uint8_t sobelT3 = (pixels_top >> 16) & 0xFF;
+          uint8_t sobelT4 = (pixels_top >> 24) & 0xFF;
+          uint8_t sobelB3 = (pixels_bot >> 16) & 0xFF;
+          uint8_t sobelB4 = (pixels_bot >> 24) & 0;
+          uint16_t sobelRight = sobelT3 | sobelT4 | sobelB3 | sobelB4;
+
+          // rho_result = calcRho(t, y, xLeft, sobelLeft, sobelRight, 0, 0);
+
+          int rhoLeftRaw = (int)(xLeft * cosVal + y * sinVal) >> 8;
+          int rhoRightRaw = (int)((xLeft + 2) * cosVal + y * sinVal) >> 8;
+
+          int rhoLeft_scaled = (rhoLeftRaw + MAX_RHO) / SCALE_RHO; 
+          int rhoRight_scaled = (rhoRightRaw + MAX_RHO) / SCALE_RHO; 
+
+          uint8_t rhoLeft = (rhoLeft_scaled & 0xFF);
+          uint8_t rhoRight = (rhoRight_scaled & 0xFF);
+        
+          uint32_t voteAddress = rhoLeft <= rhoRight ? rhoLeft : rhoRight;
+          rhoMax = rhoLeft >= rhoRight ? rhoLeft : rhoRight;
+
+          if (rhoLeft - rhoRight == 0) {
+            uint32_t vote = (sobelLeft & 1) + (sobelRight & 1);
+            if (voteAddress % 2 == 0) {
+              writeDMA(voteBuffer + voteAddress/2, swap_u32(vote));
+            } else {
+              writeDMA(voteBuffer + (voteAddress-1)/2, swap_u32((vote && 0xFFFF) >> 16)); // write into upper half of the word
+            }
+          } else if (rhoLeft - rhoRight == -1) {
+            uint32_t voteLeft = sobelLeft & 1;
+            uint32_t voteRight = sobelRight & 1;
+            if (voteAddress % 2 == 0) {
+              writeDMA(voteBuffer + voteAddress/2, swap_u32(voteLeft | (voteRight >> 16)));
+            } else {
+              writeDMA(voteBuffer + (voteAddress-1)/2, swap_u32(voteLeft >> 16));
+              writeDMA(voteBuffer + (voteAddress+1)/2, swap_u32(voteRight));            
+            }
+          } else if (rhoLeft - rhoRight == -2) {
+            uint32_t voteLeft = sobelLeft & 1;
+            uint32_t voteRight = sobelRight & 1;
+            if (voteAddress % 2 == 0) {
+              writeDMA(voteBuffer + voteAddress/2, swap_u32(voteLeft));
+              writeDMA(voteBuffer + (voteAddress+2)/2, swap_u32(voteRight));            
+            } else {
+              writeDMA(voteBuffer + (voteAddress-1)/2, swap_u32(voteLeft >> 16));
+              writeDMA(voteBuffer + (voteAddress+1)/2, swap_u32(voteRight >> 16));            
+            }
+          } else if (rhoLeft - rhoRight == 1) {
+            uint32_t voteLeft = sobelLeft & 1;
+            uint32_t voteRight = sobelRight & 1;
+            if (voteAddress % 2 == 0) {
+              writeDMA(voteBuffer + voteAddress/2, swap_u32(voteRight | (voteLeft >> 16)));
+            } else {
+              writeDMA(voteBuffer + (voteAddress-1)/2, swap_u32(voteRight >> 16));
+              writeDMA(voteBuffer + (voteAddress+1)/2, swap_u32(voteLeft));            
+            }
+          } else if (rhoLeft - rhoRight == 2) {
+            uint32_t voteLeft = sobelLeft & 1;
+            uint32_t voteRight = sobelRight & 1;
+            if (voteAddress % 2 == 0) {
+              writeDMA(voteBuffer + voteAddress/2, swap_u32(voteRight));
+              writeDMA(voteBuffer + (voteAddress+2)/2, swap_u32(voteLeft));            
+            } else {
+              writeDMA(voteBuffer + (voteAddress-1)/2, swap_u32(voteRight >> 16));
+              writeDMA(voteBuffer + (voteAddress+1)/2, swap_u32(voteLeft >> 16));            
+            }
+          }
 
           /*
           Idea: dont pack pixels in 300 little packets. Instead go through image line by line
@@ -177,93 +280,50 @@ int main () {
           probably cant be done directly (at least i dont see a way) so we first have to dump it into a
           separate array in memory that can then be incremented onto the accumulator (No idea how slow
           this will be).
+
+          Problems:
+          - votes are 16bit each so we cant take out one 32 word (4 pixels) and write back all 4 votes into the buffer
+            --> Downsampling
+          - We cant simply write back into DMA at address of RHO because it would overwrite the existing pixel information
+            --> We have to write the votes into a separate segment of the buffer for this
           */
-          writeDMA(bufferA + pixelIdx / 2, swap_u32(grayPixels));
         }
 
-        waitForDMA();
-        writeDMA(STAT_CTRL, 0); // stop transfer
+        // waitForDMA();
+        // writeDMA(STAT_CTRL, 0); // stop transfer
 
-        // Write the grayscale pixels to the output buffer
-        writeDMA(BUS_START, (uint32_t) &grayscale[512*idx]);
-        writeDMA(MEMORY_START, bufferA);
-        writeDMA(BLOCK_SIZE, 128);
-        writeDMA(STAT_CTRL, 2); // start transfer ci -> bus
-        waitForDMA();
-        writeDMA(STAT_CTRL, 0); // stop transfer
+        // // Write the grayscale pixels to the output buffer
+        // writeDMA(BUS_START, (uint32_t) &line_accumulator[0]);
+        // writeDMA(MEMORY_START, voteBuffer);
+        // writeDMA(BLOCK_SIZE, rhoMax); // THis block size needs to be adaptive now to only read what we populated
+        // writeDMA(STAT_CTRL, 2); // start transfer ci -> bus
+        // waitForDMA();
+        // writeDMA(STAT_CTRL, 0); // stop transfer
 
         // Swap the buffers
         bufferA = bufferA ^ 256; // XOR
         bufferB = bufferB ^ 256;
-      }
-    }
 
-
-    
-    // Run Hough transform   
-    // VERSION WITHOUT CI
-    // 2. Voting Process
-    // We iterate through every pixel. If it's an edge (Sobel > 0), it votes.
-    for (int y = 0; y < camParams.nrOfLinesPerImage; y++) {
-        for (int x = 0; x < camParams.nrOfPixelsPerLine; x++) {
-            if (!(sobel[y * camParams.nrOfPixelsPerLine + x] > 0)) {
-                continue; // Not an edge pixel, skip
-            }
-                
-          // For every edge pixel, calculate rho for all possible thetas
-          for (int theta = 0; theta < THETA_RES; theta++) {
-              int cosVal = getCos(theta);
-              int sinVal = sinLUT[theta];
-              int rho = (int)(x * cosVal + y * sinVal) >> 8;
-              
-              int rho_idx = (rho + MAX_RHO) / SCALE_RHO; 
-
-              if (rho_idx >= 0) {
-                  accumulator[theta][rho_idx]++;
-              }
-
-            }
-          }
+        // Increment accumulator theta row with collected votes from above
+        for (int i; i<rhoMax; i++) {
+          accumulator[t][i] += line_accumulator[i];
         }
 
-    
-    // VERSION WITH CI
-    // 2. Voting Process
-    // We iterate through two pixels at a time. If either is an edge (Sobel > 0),
-    // for (int y = 0; y < camParams.nrOfLinesPerImage; y++) {
-    //     for (int x = 0; x < camParams.nrOfPixelsPerLine; x += 2) {
-    //         if (!(sobel[y * camParams.nrOfPixelsPerLine + x] > 0) && !(sobel[y * camParams.nrOfPixelsPerLine + x + 1] > 0)) {
-    //             continue; // Neither pixel is an edge, skip
-    //         }
-                
-    //       // For every edge pixel, calculate rho for all possible thetas
-    //       for (int theta = 0; theta < THETA_RES; theta++) {
-    //           uint32_t rho_result;
-    //           calcRho(x, y, theta, x+1, y, theta, &rho_result);
-    //           int16_t rhoA = (rho_result >> 16) & 0xFFFF;
-    //           int16_t rhoB = rho_result & 0xFFFF;
+      } // Y loop
 
-    //           int rhoA_idx = (rhoA + MAX_RHO) / SCALE_RHO; 
-    //           int rhoB_idx = (rhoB + MAX_RHO) / SCALE_RHO; 
+    } // Theta loop
+    printf("Theta loop complete\n");
 
-    //           if (rhoA_idx >= 0) {
-    //               accumulator[theta][rhoA_idx]++;
-    //           }
-    //           if (rhoB_idx >= 0) {
-    //               accumulator[theta][rhoB_idx]++;
-    //           }
-    //         }
-    //       }
-    //     }
 
-    // 3. Peak Detection (Finding the lines)
+    continue;
+    // Peak Detection (Finding the lines)
     uint16_t threshold = 250; // Minimum votes to be considered a line
     int num_lines = 0;
     int top_lines[5] = {0}; // Array to store the top 5 votes
     int top_theta[5] = {0}; // Array to store the corresponding theta values (indices)
     int top_rho_idx[5] = {0}; // Array to store the corresponding rho indices
 
-    for (int t = 0; t < THETA_RES; t++) {
+    for (int t = 0; t < N_THETA; t++) {
         for (int r = 0; r < RHO_RES; r++) {
           uint16_t acc_value = accumulator[t][r];
           acc_value = 0; // Clear accumulator after reading its value
@@ -321,14 +381,6 @@ int main () {
       }
     }
     printf("\n");
-
-
-    // test calc rho CI
-    uint32_t rho_result;
-    calcRho(100, 20, 160, 15, 25, 35, &rho_result);
-    int16_t rhoA = (rho_result >> 16) & 0xFFFF;
-    int16_t rhoB = rho_result & 0xFFFF;
-    printf("Test calcRho CI: rhoA=%d, rhoB=%d\n", rhoA, rhoB);
 
   } // while
 

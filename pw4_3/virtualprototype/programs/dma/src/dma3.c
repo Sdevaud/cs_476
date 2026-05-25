@@ -7,13 +7,13 @@ Author : Till Beyer 26.04.2026
 #include <swap.h>
 
 
-#define WRITE_OPERATION (1<<9)
+#define WRITE_OPERATION (1<<10)
 
-#define BUS_START (1<<10)
-#define MEMORY_START (2<<10)
-#define BLOCK_SIZE (3<<10)
-#define BURST_SIZE (4<<10)
-#define STAT_CTRL (5<<10)
+#define BUS_START (1<<11)
+#define MEMORY_START (2<<11)
+#define BLOCK_SIZE (3<<11)
+#define BURST_SIZE (4<<11)
+#define STAT_CTRL (5<<11)
 
 
 void writeCi(uint32_t address, uint32_t data) { // the ci ID is 0xA5 -> 165 in decimal
@@ -32,16 +32,16 @@ int main() {
   printf("Check what's there now:\n");
   readCi(0, &data);
   printf("Data at address (000) : %d\n", data);
-  readCi(511, &data);
-  printf("Data at address (1FF) : %d\n", data);
+  readCi(1023, &data);
+  printf("Data at address (3FF) : %d\n", data);
 
   printf("\n-Overwrite everything with ones\n");
-  for (int i = 0; i < 512; ++i) {
+  for (int i = 0; i < 1024; ++i) {
     writeCi(i, 1);
   }
 
   printf("-Check if everything is one\n");
-  for (int i = 0; i < 512; ++i) {
+  for (int i = 0; i < 1024; ++i) {
     readCi(i, &data);
     if (data != 1) printf("Whoops, at address (%03X) we have '%d' instead of 1\n", i, data);
   }
@@ -58,7 +58,7 @@ int main() {
   }
 
   printf("-Check if rest is untouched\n");
-  for (int i = 25; i < 512; ++i) {
+  for (int i = 25; i < 1024; ++i) {
     readCi(i, &data);
     if (data != 1) printf("Whoops, at address (%03X) we have '%d' instead of 1\n", i, data);
   }
@@ -75,12 +75,12 @@ int main() {
   uint32_t desc_burst_size = 2;
 
 
-  uint32_t ones[256];
-  for (int i = 0; i < 256; ++i) {
+  uint32_t ones[900];
+  for (int i = 0; i < 900; ++i) {
       ones[i] = 1;
   }
   uint32_t ones_addr = 10;
-  uint32_t ones_block_size = 256;
+  uint32_t ones_block_size = 900;
   uint32_t ones_burst_size = 16;
 
   printf("\n-Write array of descending numbers to Ci-memory\n");
