@@ -465,7 +465,9 @@ module or1420SingleCore ( input wire         clock12MHz,
    *
    */
   houghCi #(.customInstructionId(8'hA7)) hough
-                      (.start(s_cpu1CiStart),
+                      (.clock(s_systemClock),
+                       .reset(s_cpuReset),
+                       .start(s_cpu1CiStart),
                        .valueA(s_cpu1CiDataA),
                        .valueB(s_cpu1CiDataB),
                        .iseId(s_cpu1CiN),

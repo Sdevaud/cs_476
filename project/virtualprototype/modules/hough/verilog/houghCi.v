@@ -35,17 +35,19 @@ module houghCi #(parameter [7:0] customInstructionId = 8'hA7 )
   wire [1:0] op_mode   = valueB[31:30];
   wire is_vote_mode    = (s_isMyIse && (op_mode == 2'b00));
   wire is_read_mode    = (s_isMyIse && (op_mode == 2'b01));
+  reg s_isReadReg;
+  always @(posedge clock) s_isReadReg = ~reset & is_read_mode;
 
-  reg [15:0] bankA [0:200];
-  reg [15:0] bankB [0:200];
-  reg [15:0] bankC [0:200];
-  reg [15:0] bankD [0:200];
+  reg [15:0] bankA [0:255];
+  reg [15:0] bankB [0:255];
+  reg [15:0] bankC [0:255];
+  reg [15:0] bankD [0:255];
   reg [31:0] read_buf;
 
   // initialize memory
   integer i;
   initial begin
-    for (i = 0; i < 201; i = i + 1) begin
+    for (i = 0; i < 256; i = i + 1) begin
       bankA[i] = 16'd0; bankB[i] = 16'd0;
       bankC[i] = 16'd0; bankD[i] = 16'd0;
     end
@@ -102,29 +104,76 @@ module houghCi #(parameter [7:0] customInstructionId = 8'hA7 )
   // ====== Accumulation Logic ======
 
   wire [7:0]  read_index       = valueA[7:0]; // Re-use lower 8 bits for the readout index
-  wire [31:0] total_read_votes = bankA[read_index] + bankB[read_index] + bankC[read_index] + bankD[read_index];
-  
-  assign done   = s_isMyIse;
-  assign result = (s_isMyIse) ? ((op_mode == 2'b01) ? read_buf : s_rhoValues) : 32'd0;
+  // reg resetBank;
+  // reg is_read_mode_reg;
+  // reg [7:0] read_index_reg; // latched read index for destructive clear
+  // wire [31:0] read_sum_wire; // combinational read sum for immediate response
+
+  // assign done   = s_isMyIse | s_isReadReg;
+  // If we're performing a read this cycle, return the combinational sum immediately.
+  // Otherwise, if we're in the follow-up cycle (is_read_mode_reg) return the latched read_buf.
+  // assign read_sum_wire = bankA[read_index] + bankB[read_index] + bankC[read_index] + bankD[read_index];
+  // assign result = (s_isMyIse) ?
+  //                 ((is_read_mode | is_read_mode_reg) ?
+  //                 (is_read_mode ? read_sum_wire : read_buf) : s_rhoValues)
+  //                 : 32'd0;
+
+  // always @(posedge clock) begin
+  //   if (reset) begin
+  //     read_buf <= 32'd0;
+  //     is_read_mode_reg <= 1'b0;
+  //     resetBank <= 1'b0;
+  //   end else if (is_vote_mode) begin
+  //     // all in parallel
+  //     is_read_mode_reg <= 1'b0;
+  //     resetBank <= 1'b0; // Clear reset flag in case we were in read mode in the previous cycle
+  //     if (sobelBinValueA) bankA[rhoA8] <= bankA[rhoA8] + 1'b1;
+  //     if (sobelBinValueB) bankB[rhoB8] <= bankB[rhoB8] + 1'b1;
+  //     if (sobelBinValueC) bankC[rhoC8] <= bankC[rhoC8] + 1'b1;
+  //     if (sobelBinValueD) bankD[rhoD8] <= bankD[rhoD8] + 1'b1;
+  //   end else if (is_read_mode) begin
+  //     // latch the read index so the destructive clear in the next cycle uses the correct slot
+  //     read_index_reg <= read_index;
+  //     // also capture the current bank sum into read_buf for the follow-up cycle
+  //     read_buf <= bankA[read_index] + bankB[read_index] + bankC[read_index] + bankD[read_index];
+  //     is_read_mode_reg <= 1'b1;
+  //     resetBank <= 1'b1; // Set flag to reset the bank in the next cycle
+  //   end else if (resetBank) begin
+  //     bankA[read_index_reg] <= 16'd0;
+  //     bankB[read_index_reg] <= 16'd0;
+  //     bankC[read_index_reg] <= 16'd0;
+  //     bankD[read_index_reg] <= 16'd0;
+  //   end
+  // end
+  assign done   = s_isMyIse ? is_vote_mode : s_isReadReg;
+  assign result = (is_read_mode |s_isReadReg) ? read_buf : s_rhoValues;
 
   always @(posedge clock) begin
     if (reset) begin
-      for (i = 0; i < 256; i = i + 1) begin
-        bankA[i] <= 16'd0; bankB[i] = 16'd0;
-        bankC[i] <= 16'd0; bankD[i] = 16'd0;
+      read_buf         <= 32'd0;
+    end else begin
+
+      // ==========================================
+      // ATOMIC READ-AND-CLEAR + VOTE HANDLING
+      // ==========================================
+      if (is_read_mode) begin
+        // 1. Capture the current data combinationally into the register.
+        // In Read-First BRAM, the output latch holds the OLD value before the 0 is written!
+        read_buf    <= bankA[read_index] + bankB[read_index] + bankC[read_index] + bankD[read_index];
+
+        // 2. Clear the target registers instantly on this exact same clock edge
+        bankA[read_index] <= 16'd0;
+        bankB[read_index] <= 16'd0;
+        bankC[read_index] <= 16'd0;
+        bankD[read_index] <= 16'd0;
+
+      end else if (is_vote_mode) begin
+        // Accumulate edge markers in parallel
+        if (sobelBinValueA) bankA[rhoA8] <= bankA[rhoA8] + 1'b1;
+        if (sobelBinValueB) bankB[rhoB8] <= bankB[rhoB8] + 1'b1;
+        if (sobelBinValueC) bankC[rhoC8] <= bankC[rhoC8] + 1'b1;
+        if (sobelBinValueD) bankD[rhoD8] <= bankD[rhoD8] + 1'b1;
       end
-    end else if (is_vote_mode) begin
-      // all in parallel
-      if (sobelBinValueA) bankA[rhoA8] <= bankA[rhoA8] + 1'b1;
-      if (sobelBinValueB) bankB[rhoB8] <= bankB[rhoB8] + 1'b1;
-      if (sobelBinValueC) bankC[rhoC8] <= bankC[rhoC8] + 1'b1;
-      if (sobelBinValueD) bankD[rhoD8] <= bankD[rhoD8] + 1'b1;
-    end else if (is_read_mode) begin
-      read_buf <= total_read_votes; 
-      bankA[read_index] <= 16'd0;
-      bankB[read_index] <= 16'd0;
-      bankC[read_index] <= 16'd0;
-      bankD[read_index] <= 16'd0;
     end
   end
 
