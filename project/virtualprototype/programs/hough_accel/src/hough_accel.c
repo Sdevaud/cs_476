@@ -33,7 +33,7 @@ static inline void waitForDMA() {
 #define N_THETA (int)(180 / THETA_RES)
 #define RHO_RES 200        // Adjust based on image diagonal
 #define MAX_RHO 800
-#define SCALE_RHO 4 // Scale factor to fit rho into accumulator
+#define SCALE_RHO 8 // Scale factor to fit rho into accumulator
 #define PI 3.14159265
 
 
@@ -137,14 +137,13 @@ int main () {
   // ==========================================
   printf("--- Starting Stateful Hough CI Test ---\n");
   uint32_t one = 1;
-  uint32_t x = 21;
+  uint32_t x = 5;
   uint32_t y = 20;
   voteHoughCi(0, y, x, one, one, one, one);
   asm volatile("l.nop"); // Skip a cycle
   voteHoughCi(0, y, x, one, one, one, one);
 
   printf("Reading back accumulator window from hardware BRAM:\n");
-  printf("N_THETA = %d\n", N_THETA);
   int found_votes = 0;
   for (int test_rho = 100; test_rho < 110; test_rho++) {
       incrementAccumulator(0, test_rho);
@@ -229,7 +228,7 @@ int main () {
     printf("\n");
 
     for (int t = 0; t < N_THETA; t++) { // Iterate over every theta separately
-      if ((t<28) || (t>32)) continue;
+      // if ((t<28) || (t>32)) continue;
       // Transfer first 1280 pixels to CI buffer A
       uint32_t pixel_block_addr = (uint32_t) &sobel[0];
       writeDMA(BUS_START, pixel_block_addr);
@@ -243,7 +242,7 @@ int main () {
       int theta = t * THETA_RES;
       
       for (uint32_t y = 0; y < 478; y+=2) { // We process 1280 sobel (8bit) pixels at a time (two lines)
-        if (y>0) continue;
+        // if (y>2) continue;
         pixel_block_addr = (uint32_t) &sobel[160*(y+2)];
 
         writeDMA(BUS_START, pixel_block_addr);
@@ -349,9 +348,8 @@ int main () {
 
     printf("Acc[t=90][r=100] = %d\n", accumulator[30][100]);
 
-    // continue;
     // Peak Detection (Finding the lines)
-    uint16_t threshold = 100; // Minimum votes to be considered a line
+    uint16_t threshold = 200; // Minimum votes to be considered a line
     int num_lines = 0;
     int top_lines[5] = {0}; // Array to store the top 5 votes
     int top_theta[5] = {0}; // Array to store the corresponding theta values (indices)
