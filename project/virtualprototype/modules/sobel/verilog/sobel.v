@@ -5,7 +5,7 @@ module sobelCompute (
     output wire [31:0]  sobel
 );
 
-    reg [11:0] thresholdValue = 12'd64; // Example threshold value for edge detection
+    reg [11:0] thresholdValue = 12'd512; // Example threshold value for edge detection
     // Compute Sobel gradients
     // Gx = [-1  0  1]  Gy = [-1 -2 -1]
     //      [-2  0  2]       [ 0  0  0]
