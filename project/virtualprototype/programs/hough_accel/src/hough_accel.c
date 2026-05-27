@@ -113,6 +113,7 @@ static inline void incrementAccumulator(int theta_idx, int rho_idx) {
 
 
 uint8_t sobel[640*480];
+uint16_t rgb565[640*480];
 
 int main () {
   volatile uint32_t result, cycles,stall,idle;
@@ -144,15 +145,21 @@ int main () {
   vga[1] = swap_u32(result);
   printf("PCLK (kHz) : %d\n", camParams.pixelClockInkHz );
   printf("FPS        : %d\n", camParams.framesPerSecond );
-  uint32_t grayPixels;
+
+
   vga[2] = swap_u32(2); // 2: 8bit pixels, 1: 16bit pixels
   vga[3] = swap_u32((uint32_t) &sobel[0]);
+
+
   setSobelThreshold(100);
-  setSobelMode(1);
 
   
   while(1) {
+
+    setSobelMode(1);
     takeSingleImageBlocking((uint32_t) &sobel[0]);
+    // setSobelMode(0);
+    // takeSingleImageBlocking((uint32_t) &rgb565[0]);
 
     // dummy data into sobel
     // for (int i = 0; i < 640*480; i++) {
@@ -213,7 +220,7 @@ int main () {
               P13, P14]
           D: [P7,  P8,
               P15, P16]
-          */
+          // */
           readDMA(bufferA + wordIdx, &pixels_top_left_rev); // This reads 1x32-bit word = 4x8-bit sobel pixel
           readDMA(bufferA + wordIdx + 1, &pixels_top_right_rev);
           readDMA(bufferA + 160 + wordIdx, &pixels_bot_left_rev);
@@ -223,35 +230,46 @@ int main () {
           uint32_t pixels_bot_left = swap_u32(pixels_bot_left_rev);
           uint32_t pixels_bot_right = swap_u32(pixels_bot_right_rev);
 
-          // A: P1, P2, P9, P10
+          // // A: P1, P2, P9, P10
           uint32_t xA = 4*wordIdx;
-          uint32_t sobelP1 = (pixels_top_left >> 16) & 1;
-          uint32_t sobelP2 = (pixels_top_left >> 24) & 1;
-          uint32_t sobelP9 = (pixels_bot_left >> 16) & 1;
-          uint32_t sobelP10 = (pixels_bot_left >> 24) & 1;
-          uint32_t sobelA = sobelP1 | sobelP2 | sobelP9 | sobelP10;
+
+          uint32_t maskA_top = pixels_top_left & 0x01010101;
+          uint32_t maskA_bot = pixels_bot_left & 0x01010101;
+          uint32_t maskB_top = pixels_top_right & 0x01010101;
+          uint32_t maskB_bot = pixels_bot_right & 0x01010101;
+
+          // If any bit in the top or bottom word is set, that sub-block contains an edge
+          uint32_t sobelA = ((maskA_top & 0xFFFF0000) || (maskA_bot & 0xFFFF0000)); // Left half of Left word
+          uint32_t sobelB = ((maskA_top & 0x0000FFFF) || (maskA_bot & 0x0000FFFF)); // Right half of Left word
+          uint32_t sobelC = ((maskB_top & 0xFFFF0000) || (maskB_bot & 0xFFFF0000)); // Left half of Right word
+          uint32_t sobelD = ((maskB_top & 0x0000FFFF) || (maskB_bot & 0x0000FFFF));
+          // uint32_t sobelP1 = (pixels_top_left >> 16) & 1;
+          // uint32_t sobelP2 = (pixels_top_left >> 24) & 1;
+          // uint32_t sobelP9 = (pixels_bot_left >> 16) & 1;
+          // uint32_t sobelP10 = (pixels_bot_left >> 24) & 1;
+          // uint32_t sobelA = sobelP1 | sobelP2 | sobelP9 | sobelP10;
           
-          // B: P3, P4, P11, P12
-          uint32_t sobelP3 = pixels_top_left & 1;
-          uint32_t sobelP4 = (pixels_top_left >> 8) & 1;
-          uint32_t sobelP11 = pixels_bot_left & 1;
-          uint32_t sobelP12 = (pixels_bot_left >> 8) & 1;
-          uint32_t sobelB = sobelP3 | sobelP4 | sobelP11 | sobelP12;
+          // // B: P3, P4, P11, P12
+          // uint32_t sobelP3 = pixels_top_left & 1;
+          // uint32_t sobelP4 = (pixels_top_left >> 8) & 1;
+          // uint32_t sobelP11 = pixels_bot_left & 1;
+          // uint32_t sobelP12 = (pixels_bot_left >> 8) & 1;
+          // uint32_t sobelB = sobelP3 | sobelP4 | sobelP11 | sobelP12;
 
-          // C: P5, P6, P13, P14
-          uint32_t sobelP5 = (pixels_top_right >> 16) & 1;
-          uint32_t sobelP6 = (pixels_top_right >> 24) & 1;
-          uint32_t sobelP13 = (pixels_bot_right >> 16) & 1;
-          uint32_t sobelP14 = (pixels_bot_right >> 24) & 1;
-          uint32_t sobelC = sobelP5 | sobelP6 | sobelP13 | sobelP14;
+          // // C: P5, P6, P13, P14
+          // uint32_t sobelP5 = (pixels_top_right >> 16) & 1;
+          // uint32_t sobelP6 = (pixels_top_right >> 24) & 1;
+          // uint32_t sobelP13 = (pixels_bot_right >> 16) & 1;
+          // uint32_t sobelP14 = (pixels_bot_right >> 24) & 1;
+          // uint32_t sobelC = sobelP5 | sobelP6 | sobelP13 | sobelP14;
 
-          // D: P7, P8, P15, P16
-          uint32_t sobelP7 = (pixels_top_right) & 1;
-          uint32_t sobelP8 = (pixels_top_right >> 8) & 1;
-          uint32_t sobelP15 = (pixels_bot_right) & 1;
-          uint32_t sobelP16 = (pixels_bot_right >> 8) & 1;
-          uint32_t sobelD = sobelP7 | sobelP8 | sobelP15 | sobelP16;
-
+          // // D: P7, P8, P15, P16
+          // uint32_t sobelP7 = (pixels_top_right) & 1;
+          // uint32_t sobelP8 = (pixels_top_right >> 8) & 1;
+          // uint32_t sobelP15 = (pixels_bot_right) & 1;
+          // uint32_t sobelP16 = (pixels_bot_right >> 8) & 1;
+          // uint32_t sobelD = sobelP7 | sobelP8 | sobelP15 | sobelP16;
+          
           // if (theta == ) {
           //   printf("Theta %d, Y %d, X %d: Sobel A=%d, B=%d, C=%d, D=%d\n", theta, y, xA, sobelA, sobelB, sobelC, sobelD);
           // }
@@ -260,8 +278,8 @@ int main () {
           //   printf("Theta=45, Y=%d: Acc = %4d\n", y, accumulator[t][100] + accumulator[t][99]);
           // }
 
-          if ((sobelA == 0) && (sobelB == 0) && (sobelC == 0) && (sobelD == 0)) {
-            continue; // Skip if no edges in this block
+          if (!(sobelA | sobelB | sobelC | sobelD)) {
+            continue;
           }
 
           voteHoughCi(theta, y, xA, sobelA, sobelB, sobelC, sobelD);
@@ -280,7 +298,8 @@ int main () {
       }      
 
     } // Theta loop
-
+    printf("Finished processing one frame. Performing peak detection...\n");
+    continue;
     // Peak Detection (Finding the lines)
     uint16_t threshold = 150; // Minimum votes to be considered a line
     int num_lines = 0;
