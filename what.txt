@@ -89,8 +89,8 @@ int main () {
   printf("FPS        : %d\n", camParams.framesPerSecond );
 
 
-  vga[2] = swap_u32(2); // 2: 8bit pixels, 1: 16bit pixels
-  vga[3] = swap_u32((uint32_t) &sobel[0]);
+  vga[2] = swap_u32(1); // 2: 8bit pixels, 1: 16bit pixels
+  vga[3] = swap_u32((uint32_t) &rgb565[0]);
 
 
   setSobelThreshold(100);
@@ -100,8 +100,8 @@ int main () {
     setSobelMode(1);
     takeSingleImageBlocking((uint32_t) &sobel[0]);
 
-    // setSobelMode(0);
-    // takeSingleImageBlocking((uint32_t) &rgb565[0]);
+    setSobelMode(0);
+    takeSingleImageBlocking((uint32_t) &rgb565[0]);
 
     // dummy data into sobel
     // for (int i = 0; i < 640*480; i++) {
@@ -132,7 +132,7 @@ int main () {
       writeDMA(BUS_START, pixel_block_addr);
       writeDMA(MEMORY_START, bufferA);
       writeDMA(BLOCK_SIZE, 320); // 320 words = 1280 pixels = 2 lines
-      writeDMA(BURST_SIZE, 160);
+      writeDMA(BURST_SIZE, 80);
       writeDMA(STAT_CTRL, 1); // start transfer
       waitForDMA();
       writeDMA(STAT_CTRL, 0); // stop transfer
@@ -196,10 +196,8 @@ int main () {
       }      
 
     } // Theta loop
-
     // printf("Finished processing one frame. Performing peak detection...\n");
     // continue;
-
     // Peak Detection (Finding the lines)
     uint16_t threshold = 150; // Minimum votes to be considered a line
     int num_lines = 0;
@@ -266,8 +264,6 @@ int main () {
       }
     }
     printf("=====\n");
-
-    // Draw lines on RGB image
 
   } // while
 

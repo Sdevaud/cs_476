@@ -72,6 +72,8 @@ read -sv ../../../modules/hough/verilog/houghTrigonometry.v
 read -sv ../../../modules/houghRamDmaCi/verilog/dualPortSSram.v
 read -sv ../../../modules/houghRamDmaCi/verilog/ramDmaCi.v
 
+read -sv ../../../modules/vote_count/verilog/voteCount.v
+
 
 ##############################################################
 
