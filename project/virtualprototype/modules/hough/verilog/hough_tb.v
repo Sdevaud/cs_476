@@ -41,19 +41,19 @@ module tb_hough_rho;
         // Test 2: Correct ID, Theta = 0 (Vote mode - outputs raw rhos)
         iseId  = 8'hA7; 
         // valueA: Sobel=4'b0111, xA=20, y=40, theta=0
-        valueA = {4'b1111, 10'd40, 10'd20, 8'd0};  
+        valueA = {4'b1111, 10'd640, 10'd20, 8'd0};  
         // valueB: OpMode=2'b00, xD=42, xC=44, xB=46
         valueB = {2'b00, 10'd0, 10'd0, 10'd10}; 
         start  = 1; #20;
         $display("Test 2 (Th=0)     -> done: %b, rhoA: %d, rhoB: %d,  rhoC: %d, rhoD: %d", done, result[31:24], result[23:16], result[15:8], result[7:0]);
         start  = 0; #20;
 
-        // // Test 3: Correct ID, Theta = 135
-        // valueA = {4'b1111, 10'd100, 10'd50, 8'd135};  
-        // valueB = {2'b00, 10'd40, 10'd300, 10'd200};
-        // start  = 1; #20;
-        // $display("Test 3 (Th=135)   -> done: %b, rhoA: %0d, rhoB: %0d,  rhoC: %0d, rhoD: %0d", done, result[31:24], result[23:16], result[15:8], result[7:0]);
-        // start  = 0; #20;
+        // Test 3: Correct ID, Theta = 135
+        valueA = {4'b1111, 10'd8, 10'd0, 8'd135};  
+        valueB = {2'b00, 10'd40, 10'd32, 10'd16};
+        start  = 1; #20;
+        $display("Test 3 (Th=135)   -> done: %b, rhoA: %0d, rhoB: %0d,  rhoC: %0d, rhoD: %0d", done, result[31:24], result[23:16], result[15:8], result[7:0]);
+        start  = 0; #20;
 
         // // Test 3.2: Correct ID, Theta = 135
         // valueA = {4'b1111, 10'd100, 10'd50, 8'd135};  

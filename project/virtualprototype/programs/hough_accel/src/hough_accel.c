@@ -196,9 +196,17 @@ int main () {
     takeSingleImageBlocking((uint32_t) &sobel[0]);
 
     // dummy data into sobel
-    for (int i = 0; i < 640*4; i++) {
-      sobel[i] = 255;
+    for (int i = 0; i < 640*480; i++) {
+      if (i < 640*4) sobel[i] = 255; // Horizontal line at the top
+      else if (i % 641 == 0) sobel[i] = 255; // Diagonal line TL to BR
+      // else if (i % 641 == 20) sobel[i] = 255; // Diagonal line TL to BR
+      else if (i % 639 == 630) sobel[i] = 255; // Diagonal line TR to BL
+      // else if (i % 640 == 300) sobel[i] = 255; // Vertical line
+      else sobel[i] = 0; 
     }
+    // for (int i = 0; i < 640*480; i++) {
+    //   sobel[i] = (i % 100 == 0) ? 255 : 0; // Sparse random edges for testing
+    // }
 
     uint32_t bufferA = 0;
     uint32_t bufferB = 320;
@@ -209,23 +217,6 @@ int main () {
 
     uint32_t x = 21;
     uint32_t y = 20;
-
-    voteHoughCi(90, y, x, one, one, one, one);
-    printf("Hope for the best\n");
-
-    for (int test_rho = 90; test_rho < 115; test_rho++) {
-      incrementAccumulator(30, test_rho);
-    } 
-
-    // Accumulator snap shot
-    for (int t = 28; t < 33; t++) {
-      printf("Before Theta loop: Theta = %d degrees: ", t * THETA_RES);
-      for (int r = 90; r < 115; r++) {
-        printf("%0d ", accumulator[t][r]);
-      }
-      printf("...\n");
-    }
-    printf("\n");
 
     for (int t = 0; t < N_THETA; t++) { // Iterate over every theta separately
       // if ((t<28) || (t>32)) continue;
@@ -243,7 +234,7 @@ int main () {
       
       for (uint32_t y = 0; y < 478; y+=2) { // We process 1280 sobel (8bit) pixels at a time (two lines)
         // if (y>2) continue;
-        pixel_block_addr = (uint32_t) &sobel[160*(y+2)];
+        pixel_block_addr = (uint32_t) &sobel[640*(y+2)];
 
         writeDMA(BUS_START, pixel_block_addr);
         writeDMA(MEMORY_START, bufferB);
@@ -274,7 +265,7 @@ int main () {
           uint32_t pixels_bot_right = swap_u32(pixels_bot_right_rev);
 
           // A: P1, P2, P9, P10
-          uint32_t xA = 4*wordIdx+1;
+          uint32_t xA = 4*wordIdx;
           uint32_t sobelP1 = (pixels_top_left >> 16) & 1;
           uint32_t sobelP2 = (pixels_top_left >> 24) & 1;
           uint32_t sobelP9 = (pixels_bot_left >> 16) & 1;
@@ -302,11 +293,15 @@ int main () {
           uint32_t sobelP16 = (pixels_bot_right >> 8) & 1;
           uint32_t sobelD = sobelP7 | sobelP8 | sobelP15 | sobelP16;
 
-          // if (theta == 90) {
+          // if (theta == ) {
           //   printf("Theta %d, Y %d, X %d: Sobel A=%d, B=%d, C=%d, D=%d\n", theta, y, xA, sobelA, sobelB, sobelC, sobelD);
           // }
+          
+          // if ((sobelA == 0) && (sobelB == 0) && (sobelC == 0) && (sobelD == 0) && (theta == 45)) {
+          //   printf("Theta=45, Y=%d: Acc = %4d\n", y, accumulator[t][100] + accumulator[t][99]);
+          // }
 
-          if (sobelA == 0 && sobelB == 0 && sobelC == 0 && sobelD == 0) {
+          if ((sobelA == 0) && (sobelB == 0) && (sobelC == 0) && (sobelD == 0)) {
             continue; // Skip if no edges in this block
           }
 
@@ -323,30 +318,9 @@ int main () {
       // Add to the main accumulator
       for (int r = 0; r < RHO_RES; r++) {
         incrementAccumulator(t, r);
-      }
-
-      // // Accumulator snap shot
-      // printf("In Theta loop: Theta = %d degrees: ", theta);
-      // for (int r = 96; r < 105; r++) {
-      //   printf("%0d ", accumulator[t][r]);
-      // }
-      // printf("...\n");
-      
+      }      
 
     } // Theta loop
-
-    // Accumulator snap shot
-    for (int t = 29; t < 32; t++) {
-      printf("After Theta loop: Theta = %d degrees: ", t * THETA_RES);
-      for (int r = 96; r < 105; r++) {
-        printf("%0d ", accumulator[t][r]);
-      }
-      printf("...\n");
-    }
-
-    printf("\n");
-
-    printf("Acc[t=90][r=100] = %d\n", accumulator[30][100]);
 
     // Peak Detection (Finding the lines)
     uint16_t threshold = 200; // Minimum votes to be considered a line

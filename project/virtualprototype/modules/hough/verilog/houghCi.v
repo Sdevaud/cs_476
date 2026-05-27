@@ -66,11 +66,11 @@ module houghCi #(parameter [7:0] customInstructionId = 8'hA7 )
   reg signed [31:0] rhoA_scaled, rhoB_scaled, rhoC_scaled, rhoD_scaled; 
   
   wire [7:0] theta = valueA[7:0];
-  wire signed [9:0] y = valueA[17:8];
-  wire signed [9:0] xA = valueA[27:18];
-  wire signed [9:0] xB = valueB[9:0];
-  wire signed [9:0] xC = valueB[19:10];
-  wire signed [9:0] xD = valueB[29:20];
+  wire signed [10:0] y = {1'b0, valueA[17:8]};
+  wire signed [10:0] xA = {1'b0, valueA[27:18]};
+  wire signed [10:0] xB = {1'b0, valueB[9:0]};
+  wire signed [10:0] xC = {1'b0, valueB[19:10]};
+  wire signed [10:0] xD = {1'b0, valueB[29:20]};
   
   wire sobelBinValueA = valueA[28];
   wire sobelBinValueB = valueA[29];
