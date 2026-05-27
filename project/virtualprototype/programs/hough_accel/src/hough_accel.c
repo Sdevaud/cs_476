@@ -132,40 +132,6 @@ int main () {
     }
   }
 
-  // ==========================================
-  // TEST SEQUENCE FOR STATEFUL HOUGH CI
-  // ==========================================
-  printf("--- Starting Stateful Hough CI Test ---\n");
-  uint32_t one = 1;
-  uint32_t x = 5;
-  uint32_t y = 20;
-  voteHoughCi(0, y, x, one, one, one, one);
-  asm volatile("l.nop"); // Skip a cycle
-  voteHoughCi(0, y, x, one, one, one, one);
-
-  printf("Reading back accumulator window from hardware BRAM:\n");
-  int found_votes = 0;
-  for (int test_rho = 100; test_rho < 110; test_rho++) {
-      incrementAccumulator(0, test_rho);
-  }
-
-  for (int test_rho = 100; test_rho < 110; test_rho++) {
-      uint16_t votes = accumulator[0][test_rho];
-      printf("Rho Index %d: Votes = %d\n", test_rho, votes);
-      if (votes > 0) found_votes++;
-  }
-
-  // 3. Verify the "Destructive Read" / Clear feature worked.
-  // Reading the exact same window again should return absolutely zero.
-  uint32_t clear_check = 0;
-  asm volatile("l.nios_rrr %[out1], %[in1], %[in2], 167" 
-              : [out1] "=r" (clear_check) 
-              : [in1] "r" (105), [in2] "r" (1 << 30));
-
-  printf("  -> Post-clear verification at Index 105: 0x%08X (Expected: 0)\n", clear_check);
-  printf("--- Stateful Hough CI Test Complete ---\n\n");
-  // ==========================================
-
 
   printf("Initialising camera (this takes up to 3 seconds)!\n" );
   camParams = initOv7670(VGA);
@@ -181,29 +147,22 @@ int main () {
   uint32_t grayPixels;
   vga[2] = swap_u32(2); // 2: 8bit pixels, 1: 16bit pixels
   vga[3] = swap_u32((uint32_t) &sobel[0]);
-  setSobelThreshold(120);
+  setSobelThreshold(100);
   setSobelMode(1);
-
-  // Clear main accumulator
-  for (int t = 0; t < N_THETA; t++) {
-    for (int r = 0; r < RHO_RES; r++) {
-        accumulator[t][r] = 0;
-    }
-  }
 
   
   while(1) {
     takeSingleImageBlocking((uint32_t) &sobel[0]);
 
     // dummy data into sobel
-    for (int i = 0; i < 640*480; i++) {
-      if (i < 640*4) sobel[i] = 255; // Horizontal line at the top
-      else if (i % 641 == 0) sobel[i] = 255; // Diagonal line TL to BR
-      // else if (i % 641 == 20) sobel[i] = 255; // Diagonal line TL to BR
-      else if (i % 639 == 630) sobel[i] = 255; // Diagonal line TR to BL
-      // else if (i % 640 == 300) sobel[i] = 255; // Vertical line
-      else sobel[i] = 0; 
-    }
+    // for (int i = 0; i < 640*480; i++) {
+    //   if (i < 640*4) sobel[i] = 255; // Horizontal line at the top
+    //   else if (i % 641 == 0) sobel[i] = 255; // Diagonal line TL to BR
+    //   // else if (i % 641 == 20) sobel[i] = 255; // Diagonal line TL to BR
+    //   else if (i % 639 == 630) sobel[i] = 255; // Diagonal line TR to BL
+    //   // else if (i % 640 == 300) sobel[i] = 255; // Vertical line
+    //   else sobel[i] = 0; 
+    // }
     // for (int i = 0; i < 640*480; i++) {
     //   sobel[i] = (i % 100 == 0) ? 255 : 0; // Sparse random edges for testing
     // }
@@ -323,7 +282,7 @@ int main () {
     } // Theta loop
 
     // Peak Detection (Finding the lines)
-    uint16_t threshold = 200; // Minimum votes to be considered a line
+    uint16_t threshold = 150; // Minimum votes to be considered a line
     int num_lines = 0;
     int top_lines[5] = {0}; // Array to store the top 5 votes
     int top_theta[5] = {0}; // Array to store the corresponding theta values (indices)
