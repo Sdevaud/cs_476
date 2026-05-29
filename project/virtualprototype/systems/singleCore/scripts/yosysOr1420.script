@@ -66,8 +66,11 @@ read -sv ../../../modules/support/verilog/sram2048x8Dp.v
 read -sv ../../../modules/sobel/verilog/camera_optimised.v
 read -sv ../../../modules/sobel/verilog/ram640dp.v
 read -sv ../../../modules/sobel/verilog/sobel.v
-read -sv ../../../modules/sobel/verilog/frame_comparaison.v
-read -sv ../../../modules/sobel/verilog/pixel_comparaison.v
+read -sv ../../../modules/sobel/verilog/jaccard.v
+read -sv ../../../modules/sobel/verilog/white_counter.v
+read -sv ../../../modules/sobel/verilog/dice.v
+read -sv ../../../modules/sobel/verilog/complementary.v
+read -sv ../../../modules/sobel/verilog/intersection.v
 ##############################################################
 
 read -sv ../verilog/or1420SingleCore.v

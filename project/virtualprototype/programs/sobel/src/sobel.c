@@ -27,7 +27,9 @@ const uint16_t green = 0x07E0;
 const uint16_t black = 0x0000;
 const uint16_t white = 0xFFFF;
 
-const uint32_t delayRefresh = 10;
+const uint32_t setThreshold = 0xFF << 24;
+
+const uint32_t delayRefresh = 7;
 
 void write_DMA(const uint32_t address, const uint32_t data)
 { // the ci ID is 0xA5 -> 165 in decimal
@@ -48,12 +50,23 @@ void wait_DMA()
   } while (data & 1); // wait until the busy bit is zero
 }
 
-bool movement_screen(const volatile uint32_t *pixelActualFrame, const volatile uint32_t *pixelPreviousFrame)
+uint32_t complementary(const volatile uint32_t *pixelActualFrame, const volatile uint32_t *pixelPreviousFrame)
 {
   uint32_t move = 0;
   asm volatile("l.nios_rrr %[out1],%[in1],%[in2],40" : [out1] "=r"(move) : [in1] "r"(*pixelActualFrame), [in2] "r"(*pixelPreviousFrame));
-  printf("move : %u\n", move);
-  return move == 10;
+  return move;
+}
+
+uint32_t white_counter(const volatile uint32_t *pixelActualFrame) {
+  uint32_t whitePixel = 0;
+  asm volatile("l.nios_rrr %[out1],%[in1],r0,41" : [out1] "=r"(whitePixel) : [in1] "r"(*pixelActualFrame));
+  return whitePixel;
+}
+
+uint32_t intersection_counter(const volatile uint32_t* actualPixel, const volatile uint32_t* previousPixel) {
+  volatile uint32_t sobelPixel = 0u;
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],44" : [out1] "=r"(sobelPixel) : [in1] "r"(*actualPixel), [in2] "r"(*previousPixel));
+  return sobelPixel;
 }
 
 void profiling(const uint32_t input, volatile uint32_t *output)
@@ -83,6 +96,22 @@ void swap_buffer(uint32_t *buffer1, uint32_t *buffer2)
   *buffer2 = transition;
 }
 
+bool jaccard(const volatile uint32_t* unionPreviousActualPicture, const volatile uint32_t* IntersectionPreviousActualPicture) {
+  volatile uint32_t move = 0u;
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],42" : [out1] "=r"(move) : [in1] "r"(*unionPreviousActualPicture), [in2] "r"(*IntersectionPreviousActualPicture));
+  return move == 1u;
+}
+
+bool dice(uint32_t totalwhitepixel, const volatile uint32_t* IntersectionPreviousActualPicture) {
+  volatile uint32_t move = 0u;
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],43" : [out1] "=r"(move) : [in1] "r"(totalwhitepixel), [in2] "r"(*IntersectionPreviousActualPicture));
+  return move == 1u;
+}
+
+void set_threshold() {
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],42" ::[in1] "r"(setThreshold), [in2] "r"(30));
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],43" ::[in1] "r"(setThreshold), [in2] "r"(30));
+}
 
 volatile uint8_t actualSobelTab[640 * 480];
 volatile uint8_t previousSobelTab[640 * 480];
@@ -94,12 +123,14 @@ int main()
   
   volatile uint8_t* previousSobel = previousSobelTab;
   volatile uint8_t* actualSobel = actualSobelTab;
-  bool frameMovement = false;
-  bool stopOuterLoop = false;
-  bool firstDifferent = false;
-  bool twoDifferentInARow = false;
-  bool threeDifferentInARow = false;
 
+  volatile bool actualMovement = false;
+  volatile bool frameMovement = false;
+  volatile uint32_t whitePixelCounterActual = 0;
+  volatile uint32_t whitePixelCounterPrevious = 0;
+  volatile uint32_t unionPreviousActualPicture = 0;
+  volatile uint32_t IntersectionPreviousActualPicture = 0;
+  volatile uint32_t ComplementaryPreviousActualPicture = 0;
   
   volatile uint32_t result, cycles, stall, idle;
   volatile uint32_t timeCounter = 0;
@@ -126,6 +157,7 @@ int main()
   /* set up the generic dma parameters */
   write_DMA(BLOCK_SIZE, USED_BLOCK_SIZE);
   write_DMA(BURST_SIZE, USED_BURST_SIZE);
+  set_threshold();
 
   takeSingleImageBlocking((uint32_t) previousSobel);
 
@@ -144,13 +176,10 @@ int main()
     uint32_t previousPtr = (uint32_t) previousSobel;
     uint32_t actualPtr = (uint32_t) actualSobel;
 
-    reset_profiling();
-
     if (frameMovement) {
-      printf("timeCounter : %u \n", timeCounter);
       ++timeCounter;
+      // printf("hello \n");
       if (timeCounter > delayRefresh) {
-        printf("frameMovement : %d\n", frameMovement);
         frameMovement = false;
         timeCounter = 0;
         vga[3] = swap_u32((uint32_t) blackScreen);
@@ -194,27 +223,38 @@ int main()
         read_DMA(previousBuffer2 + pixel, &previousPixel);
         read_DMA(actualBuffer2 + pixel, &actualPixel);
 
-        if (actualPixel != previousPixel) {
-          frameMovement = true;
-          vga[3] = swap_u32((uint32_t) actualSobel);
-          timeCounter = 0;
-          stopOuterLoop = true;
-          break;
-        }
-      }
+        ComplementaryPreviousActualPicture += complementary(&actualPixel, &previousPixel);
+        // whitePixelCounterActual += white_counter(&actualPixel);
+        IntersectionPreviousActualPicture += intersection_counter(&actualPixel, &previousPixel);
+      } // DMA Pass
+
       wait_DMA();
-      if (stopOuterLoop) {
-        stopOuterLoop = false;
-        break;
-      }
 
       swap_buffer(&previousBuffer1, &previousBuffer2);
       swap_buffer(&actualBuffer1, &actualBuffer2);
       previousPtr += USED_BLOCK_SIZE * sizeof(uint32_t);
       actualPtr += USED_BLOCK_SIZE * sizeof(uint32_t);
+    } // one frame
+
+    unionPreviousActualPicture = ComplementaryPreviousActualPicture + IntersectionPreviousActualPicture;
+    actualMovement = jaccard(&unionPreviousActualPicture, &IntersectionPreviousActualPicture);
+    // actualMovement = dice(whitePixelCounterActual + whitePixelCounterPrevious, &IntersectionPreviousActualPicture);
+
+    if (actualMovement) {
+      frameMovement = true;
+      vga[3] = swap_u32((uint32_t) actualSobel);
+      timeCounter = 0;
     }
 
+    unionPreviousActualPicture = 0;
+    IntersectionPreviousActualPicture = 0;
+    ComplementaryPreviousActualPicture = 0;
+    whitePixelCounterPrevious = whitePixelCounterActual;
+    whitePixelCounterActual = 0;
+
+    volatile uint8_t *tmp = previousSobel;
     previousSobel = actualSobel;
+    actualSobel = tmp;
 
 #ifdef __profiling__
     profiling((1 << 8 | 7 << 4), &cycles);
