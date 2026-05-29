@@ -322,7 +322,7 @@ module or1420SingleCore ( input wire         clock12MHz,
    * Here we instantiate the CPU
    *
    */
-  wire [31:0] s_cpu1CiResult, s_grayResult, s_ramDmaResult;
+  wire [31:0] s_cpu1CiResult, s_grayResult, s_ramDmaResult, s_comparaisonResult;
   wire [31:0] s_cpu1CiDataA, s_cpu1CiDataB, s_camCiResult, s_delayResult;
   wire [7:0]  s_cpu1CiN;
   wire        s_cpu1CiRa, s_cpu1CiRb, s_cpu1CiRc, s_cpu1CiStart, s_cpu1CiCke, s_cpu1CiDone, s_i2cCiDone, s_delayCiDone;
@@ -334,12 +334,12 @@ module or1420SingleCore ( input wire         clock12MHz,
   wire [3:0]  s_cpu1byteEnables;
   wire        s_cpu1DataValid;
   wire [7:0]  s_cpu1BurstSize;
-  wire        s_spm1Irq, s_grayDone, s_profileDone, s_stall;
+  wire        s_spm1Irq, s_grayDone, s_profileDone, s_stall, s_comparaisonDone;
   
   assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_grayDone | s_profileDone |
-                        s_ramDmaDone;
+                        s_ramDmaDone | s_comparaisonDone;
   assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_grayResult |  
-                          s_profileResult | s_ramDmaResult; 
+                          s_profileResult | s_ramDmaResult | s_comparaisonResult; 
 
   or1420Top #( .NOP_INSTRUCTION(32'h1500FFFF)) cpu1
              (.cpuClock(s_systemClock),
@@ -750,6 +750,21 @@ module or1420SingleCore ( input wire         clock12MHz,
                       .addressDataIn(s_addressData[31:30]),
                       .burstSizeIn(s_burstSize));
  
+  
+  /*
+  *
+  * Here we define the bour custum instruction
+  *
+  */
+
+  frameComparaison #(.customInstructionId(8'd40)) comparator
+                        (.start(s_cpu1CiStart),
+                        .valueA(s_cpu1CiDataA),
+                        .valueB(s_cpu1CiDataB),
+                        .iseId(s_cpu1CiN),
+                        .done(s_comparaisonDone),
+                        .result(s_comparaisonResult) );
+  
   /*
    *
    * Here we define the bus architecture
