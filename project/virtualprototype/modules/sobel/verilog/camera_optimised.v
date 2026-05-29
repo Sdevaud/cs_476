@@ -43,7 +43,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
    *     8        Read Sobel threshold
    *     9        Write Sobel threshold (ciValueB[7..0])
    *     10       Switch mode (ciValueB[0]): 0 = RGB565, 1 = Sobel
-   *
+   *     11       Set line coordinates (valueB[31:0] = {rho1, theta1, rho0, theta0}, valueA[31:0] = {12'd0, rho2, theta2, 4'd11})
    */
 
   reg [1:0] s_singleShotActionReg;
@@ -110,15 +110,16 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
 
   reg [7:0] s_sobelThresholdReg;
   reg s_sobelActiveReg;
+  
   always @(posedge clock)
-    begin
-      s_sobelThresholdReg <= (reset == 1'b1) ? 8'd128 : (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd9) ? ciValueB[7:0] : s_sobelThresholdReg;
+  begin
+    s_sobelThresholdReg <= (reset == 1'b1) ? 8'd128 : (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd9) ? ciValueB[7:0] : s_sobelThresholdReg;
       s_sobelActiveReg <= (reset == 1'b1) ? 1'b0 : (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd10) ? ciValueB[0] : s_sobelActiveReg;
     end
-  
-  /*
-   *
-   * Here we do the measurements on the camera interface
+    
+    /*
+    *
+    * Here we do the measurements on the camera interface
    *
    */
   reg[1:0]  s_vsyncDetectReg;
@@ -133,7 +134,7 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
   wire s_hsyncNegEdge = ~s_hsyncDetectReg[0] & s_hsyncDetectReg[1];
   
   always @(posedge pclk)
-    begin
+  begin
       s_vsyncDetectReg     <= {s_vsyncDetectReg[0],vsync};
       s_hsyncDetectReg     <= {s_hsyncDetectReg[0],hsync};
       s_pixelCountValueReg <= (s_hsyncNegEdge == 1'b1) ? s_pixelCountReg : s_pixelCountValueReg;
@@ -145,23 +146,88 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       s_fpsCountReg        <= (reset == 1'b1 || s_clockFPS == 1'b1) ? 8'd0 : (s_vsyncNegEdge == 1'b1) ? s_fpsCountReg + 8'd1 : s_fpsCountReg;
       s_fpsCountValueReg   <= (reset == 1'b1) ? 8'd0 : (s_clockFPS == 1'b1) ? s_fpsCountReg : s_fpsCountValueReg;
     end
-  
+    
    synchroFlop spclk ( .clockIn(clock),
-                       .clockOut(pclk),
-                       .reset(reset),
-                       .D(s_khzCountZero),
-                       .Q(s_clockPclkValue) );
+   .clockOut(pclk),
+   .reset(reset),
+   .D(s_khzCountZero),
+   .Q(s_clockPclkValue) );
    synchroFlop sfps ( .clockIn(clock),
-                      .clockOut(pclk),
-                      .reset(reset),
-                      .D(s_hzCountZero),
-                      .Q(s_clockFPS) );
-  /*
+   .clockOut(pclk),
+   .reset(reset),
+   .D(s_hzCountZero),
+   .Q(s_clockFPS) );
+   
+   
+   /* ==== Added by Till ====
    *
-   * here the ci interface is defined
+   * We store information about the lines to draw on screen (3 theta+rho pairs)
    *
    */
-  reg [31:0] s_selectedResult;
+   reg [7:0] s_theta0Reg, s_rho0Reg, s_theta1Reg, s_rho1Reg, s_theta2Reg, s_rho2Reg;
+   reg [7:0] s_theta0_pclk, s_rho0_pclk, s_theta1_pclk, s_rho1_pclk, s_theta2_pclk, s_rho2_pclk;
+   wire signed [9:0] s_sintheta0Reg, s_costheta0Reg, s_sintheta1Reg, s_costheta1Reg, s_sintheta2Reg, s_costheta2Reg;
+   wire signed [31:0] s_rho0, s_rho1, s_rho2;
+   
+   always @(posedge clock) begin
+     if (reset == 1'b1) begin
+       s_theta0Reg <= 8'd0;
+        s_rho0Reg <= 8'd0;
+        s_theta1Reg <= 8'd0;
+        s_rho1Reg <= 8'd0;
+        s_theta2Reg <= 8'd0;
+        s_rho2Reg <= 8'd0;
+      end else if (s_isMyCi == 1'b1 && ciValueA[3:0] == 4'd11) begin
+        s_theta0Reg <= ciValueB[7:0];
+        s_rho0Reg <= ciValueB[15:8];
+        s_theta1Reg <= ciValueB[23:16];
+        s_rho1Reg <= ciValueB[31:24];
+        s_theta2Reg <= ciValueA[11:4];
+        s_rho2Reg <= ciValueA[19:12];
+      end
+   end
+
+   // Synchronize two clock domains
+   always @(posedge pclk) begin
+     if (reset == 1'b1) begin
+       s_theta0_pclk <= 8'd0;
+       s_rho0_pclk <= 8'd0;
+       s_theta1_pclk <= 8'd0;
+       s_rho1_pclk <= 8'd0;
+       s_theta2_pclk <= 8'd0;
+       s_rho2_pclk <= 8'd0;
+     end else if (s_vsyncNegEdge) begin
+       // Safely snapshot the values when the camera transitions to a new frame
+       s_theta0_pclk <= s_theta0Reg;
+       s_rho0_pclk   <= s_rho0Reg;
+       s_theta1_pclk <= s_theta1Reg;
+       s_rho1_pclk   <= s_rho1Reg;
+       s_theta2_pclk <= s_theta2Reg;
+       s_rho2_pclk   <= s_rho2Reg;
+     end
+   end
+   
+   
+     houghAngleLUT LUT0 ( .theta(s_theta0_pclk),
+                         .sin(s_sintheta0Reg),
+                         .cos(s_costheta0Reg) );
+     houghAngleLUT LUT1 ( .theta(s_theta1_pclk),
+                         .sin(s_sintheta1Reg),
+                         .cos(s_costheta1Reg) );
+     houghAngleLUT LUT2 ( .theta(s_theta2_pclk),
+                         .sin(s_sintheta2Reg),
+                         .cos(s_costheta2Reg) );
+     // rhoA_scaled <= (rhoA_corrected + 32'sd800 + 32'sd4) >>> 3;
+     assign s_rho0 = ($signed({1'd0, s_rho0_pclk, 3'd0}) - 12'sd800) <<< 8; // LUT outputs are scaled by 256
+     assign s_rho1 = ($signed({1'd0, s_rho1_pclk, 3'd0}) - 12'sd800) <<< 8;
+     assign s_rho2 = ($signed({1'd0, s_rho2_pclk, 3'd0}) - 12'sd800) <<< 8;
+
+   /*
+   *
+   * here the ci interface is defined
+    *
+    */
+    reg [31:0] s_selectedResult;
   
   assign ciDone   = s_isMyCi;
   assign ciResult = (s_isMyCi == 1'b0) ? 32'd0 : s_selectedResult;
@@ -190,8 +256,17 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
 
    // Define Line buffer parameters for RGB565 mode (will be used further down after Sobel)
    wire s_weLineBufferRGB = (s_pixelCountReg[1:0] == 2'b11) ? hsync : 1'b0;
-   wire [31:0] s_rgbPixelWord = {s_byte1Reg,camData,s_byte3Reg,s_byte2Reg};
+   wire [31:0] s_rgbPixelWord = {s_byte1Reg,s_byte0Reg,s_byte3Reg,s_byte2Reg};
    wire [8:0] s_writeAddressRGB = s_pixelCountReg[10:2];
+   wire signed [10:0] x = {1'd0, s_pixelCountReg[10:1]} - 11'sd1;;
+   wire signed [10:0] y = {1'd0, s_lineCountReg};
+   wire signed [31:0] f0 = x * s_costheta0Reg + y * s_sintheta0Reg;
+   wire signed [31:0] f1 = x * s_costheta1Reg + y * s_sintheta1Reg;
+   wire signed [31:0] f2 = x * s_costheta2Reg + y * s_sintheta2Reg;
+
+   wire onLine = (f0 - s_rho0 <= 256 && f0 - s_rho0 >= -256)
+              || (f1 - s_rho1 <= 256 && f1 - s_rho1 >= -256)
+              || (f2 - s_rho2 <= 256 && f2 - s_rho2 >= -256);
 
   /* ==== Added by Sebastien ==== */
 
@@ -221,9 +296,17 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       s_byte1Reg <= (subPixelCount == 3'b110 && hsync == 1'b1) ? camData : s_byte1Reg;
       s_byte0Reg <= (subPixelCount == 3'b111 && hsync == 1'b1) ? camData : s_byte0Reg;
     end else if (s_sobelActiveReg == 1'b0) begin
-      s_byte3Reg <= (s_pixelCountReg[1:0] == 2'b00 && hsync == 1'b1) ? camData : s_byte3Reg;
-      s_byte2Reg <= (s_pixelCountReg[1:0] == 2'b01 && hsync == 1'b1) ? camData : s_byte2Reg;
-      s_byte1Reg <= (s_pixelCountReg[1:0] == 2'b10 && hsync == 1'b1) ? camData : s_byte1Reg;
+      if (!onLine) begin
+        s_byte3Reg <= (s_pixelCountReg[1:0] == 2'b00 && hsync == 1'b1) ? camData : s_byte3Reg;
+        s_byte2Reg <= (s_pixelCountReg[1:0] == 2'b01 && hsync == 1'b1) ? camData : s_byte2Reg;
+        s_byte1Reg <= (s_pixelCountReg[1:0] == 2'b10 && hsync == 1'b1) ? camData : s_byte1Reg;
+        s_byte0Reg <= (s_pixelCountReg[1:0] == 2'b11 && hsync == 1'b1) ? camData : s_byte0Reg;
+      end else begin
+        s_byte3Reg <= (s_pixelCountReg[1:0] == 2'b00 && hsync == 1'b1) ? 8'b11111000 : s_byte3Reg;
+        s_byte2Reg <= (s_pixelCountReg[1:0] == 2'b01 && hsync == 1'b1) ? 8'b0 : s_byte2Reg;
+        s_byte1Reg <= (s_pixelCountReg[1:0] == 2'b10 && hsync == 1'b1) ? 8'b11111000 : s_byte1Reg;
+        s_byte0Reg <= (s_pixelCountReg[1:0] == 2'b11 && hsync == 1'b1) ? 8'b0 : s_byte0Reg;
+      end
     end
 
   // ==== Added by Till ====  

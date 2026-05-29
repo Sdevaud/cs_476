@@ -25,6 +25,7 @@ void enableContinues(uint32_t framebuffer);
 void disableContinues();
 void setSobelThreshold(uint8_t threshold);
 void setSobelMode(int mode);
+void setLineParameters(uint32_t theta0, uint32_t rho0, uint32_t theta1, uint32_t rho1, uint32_t theta2, uint32_t rho2);
 uint32_t pollSingleShotDone();
 
 #endif

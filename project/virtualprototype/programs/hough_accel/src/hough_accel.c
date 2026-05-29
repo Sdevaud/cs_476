@@ -3,9 +3,8 @@
 #include <swap.h>
 #include <vga.h>
 
-
+// === DMA Config ===
 #define WRITE_OPERATION (1<<10)
-
 #define BUS_START (1<<11)
 #define MEMORY_START (2<<11)
 #define BLOCK_SIZE (3<<11)
@@ -28,15 +27,14 @@ static inline void waitForDMA() {
 }
 
 
-// Hough Configuration
-#define THETA_RES 3      // 0 to 180 degrees
+// == Hough Transform Config ===
+#define THETA_RES 3
 #define N_THETA (int)(180 / THETA_RES)
-#define RHO_RES 200        // Adjust based on image diagonal
+#define N_RHO 200
 #define MAX_RHO 800
-#define SCALE_RHO 8 // Scale factor to fit rho into accumulator
-#define PI 3.14159265
+#define RHO_RES 8 // Scale factor to fit rho into accumulator
 
-uint16_t accumulator[N_THETA][RHO_RES];
+uint16_t accumulator[N_THETA][N_RHO];
 
 static inline void voteHoughCi(int theta, uint32_t y, uint32_t xA, uint32_t sobelVotes) {
   uint32_t valueA = theta | (y << 8) | (xA << 18) | sobelVotes;
@@ -53,8 +51,32 @@ static inline void incrementAccumulator(int theta_idx, int rho_idx) {
 static inline void voteCountCi(uint32_t pixelsTopReversed, uint32_t pixelsBotReversed, uint32_t *voteCount) {
   asm volatile("l.nios_rrr %[out1],%[in1], %[in2],166" :[out1]"=r"(*voteCount) :[in1] "r"(pixelsTopReversed), [in2] "r"(pixelsBotReversed));
 }
-  
 
+// === Peak Finding Config ===
+#define TOP_LINE_COUNT 3
+#define MERGE_RHO_DELTA (6 * RHO_RES)
+#define MERGE_THETA_DELTA (2 * THETA_RES)
+#define THRESHOLD_PEAK 200
+#define MERGE_DEBUG 1
+
+typedef struct {
+  uint16_t votes;
+  uint16_t peak_votes;
+  uint32_t theta_weight_sum;
+  uint32_t rho_weight_sum;
+  int theta_idx;
+  int rho_idx;
+} LinePeak;
+
+static inline int rhoIdxToPixels(int rho_idx) {
+  return (rho_idx * RHO_RES) - MAX_RHO;
+}
+
+static inline int thetaIdxToDegrees(int theta_idx) {
+  return theta_idx * THETA_RES;
+}
+
+  
 uint8_t sobel[640*480];
 uint16_t rgb565[640*480];
 
@@ -65,55 +87,47 @@ int main () {
   vga_clear();
 
   // Clear Ci memory (just in case)
-  for (int r = 0; r < RHO_RES; r++) {
+  for (int r = 0; r < N_RHO; r++) {
     incrementAccumulator(0, r);
   }
 
   // Clear main accumulator
   for (int t = 0; t < N_THETA; t++) {
-    for (int r = 0; r < RHO_RES; r++) {
+    for (int r = 0; r < N_RHO; r++) {
         accumulator[t][r] = 0;
     }
   }
 
-  printf("Initialising camera (this takes up to 3 seconds)!\n" );
+  printf("Starting Line Detection!\n" );
   camParams = initOv7670(VGA);
-  printf("Done!\n" );
-  printf("NrOfPixels : %d\n", camParams.nrOfPixelsPerLine );
+  printf("...\n" );
   result = (camParams.nrOfPixelsPerLine <= 320) ? camParams.nrOfPixelsPerLine | 0x80000000 : camParams.nrOfPixelsPerLine;
   vga[0] = swap_u32(result);
-  printf("NrOfLines  : %d\n", camParams.nrOfLinesPerImage );
   result =  (camParams.nrOfLinesPerImage <= 240) ? camParams.nrOfLinesPerImage | 0x80000000 : camParams.nrOfLinesPerImage;
   vga[1] = swap_u32(result);
-  printf("PCLK (kHz) : %d\n", camParams.pixelClockInkHz );
-  printf("FPS        : %d\n", camParams.framesPerSecond );
-
-
-  vga[2] = swap_u32(2); // 2: 8bit pixels, 1: 16bit pixels
-  vga[3] = swap_u32((uint32_t) &sobel[0]);
-
+  vga[2] = swap_u32(1); // 2: 8bit pixels, 1: 16bit pixels
+  vga[3] = swap_u32((uint32_t) &rgb565[0]);
 
   setSobelThreshold(100);
-
   
   while(1) {
+
+    setSobelMode(0);
+    takeSingleImageBlocking((uint32_t) &rgb565[0]);
+
     setSobelMode(1);
     takeSingleImageBlocking((uint32_t) &sobel[0]);
 
-    // setSobelMode(0);
-    // takeSingleImageBlocking((uint32_t) &rgb565[0]);
-
     // dummy data into sobel
     // for (int i = 0; i < 640*480; i++) {
-    //   if (i < 640*4) sobel[i] = 255; // Horizontal line at the top
-    //   else if (i % 641 == 40) sobel[i] = 255; // Diagonal line TL to BR
-    //   // else if (i % 641 == 20) sobel[i] = 255; // Diagonal line TL to BR
-    //   else if (i % 639 == 630) sobel[i] = 255; // Diagonal line TR to BL
+    //   if (640*8 <= i && i < 640*10) sobel[i] = 255; // Horizontal line at the top
+    //   // else if (i % 641 == 100) sobel[i] = 255; // Diagonal line TL to BR
+    //   else if (i % 641 == 0) sobel[i] = 255; // Diagonal line TL to BR
+    //   // else if (i % 641 == 630) sobel[i] = 255; // Diagonal line TR to BL
+    //   else if (i % 641 == 530) sobel[i] = 255; // Diagonal line TR to BL
     //   // else if (i % 640 == 300) sobel[i] = 255; // Vertical line
+    //   // else if (i % 640 == 500) sobel[i] = 255; // Vertical line
     //   else sobel[i] = 0; 
-    // }
-    // for (int i = 0; i < 640*480; i++) {
-    //   sobel[i] = (i % 100 == 0) ? 255 : 0; // Sparse random edges for testing
     // }
 
     uint32_t bufferA = 0;
@@ -126,7 +140,6 @@ int main () {
     uint32_t voteCountRight = 0;
 
     for (int t = 0; t < N_THETA; t++) { // Iterate over every theta separately
-      // if ((t<28) || (t>32)) continue;
       // Transfer first 1280 pixels to CI buffer A
       uint32_t pixel_block_addr = (uint32_t) &sobel[0];
       writeDMA(BUS_START, pixel_block_addr);
@@ -140,7 +153,6 @@ int main () {
       int theta = t * THETA_RES;
       
       for (uint32_t y = 0; y < 478; y+=2) { // We process 1280 sobel (8bit) pixels at a time (two lines)
-        // if (y>2) continue;
         pixel_block_addr = (uint32_t) &sobel[640*(y+2)];
 
         writeDMA(BUS_START, pixel_block_addr);
@@ -191,7 +203,7 @@ int main () {
       } // Y loop
 
       // Add to the main accumulator
-      for (int r = 0; r < RHO_RES; r++) {
+      for (int r = 0; r < N_RHO; r++) {
         incrementAccumulator(t, r);
       }      
 
@@ -200,71 +212,104 @@ int main () {
     // printf("Finished processing one frame. Performing peak detection...\n");
     // continue;
 
-    // Peak Detection (Finding the lines)
-    uint16_t threshold = 150; // Minimum votes to be considered a line
-    int num_lines = 0;
-    int top_lines[5] = {0}; // Array to store the top 5 votes
-    int top_theta[5] = {0}; // Array to store the corresponding theta values (indices)
-    int top_rho_idx[5] = {0}; // Array to store the corresponding rho indices
+    // ==========================================
+    // 1. Peak Detection via Non-Maximum Suppression
+    // ==========================================
+    static LinePeak merged_lines[N_THETA * N_RHO];
+    int merged_line_count = 0;
 
     for (int t = 0; t < N_THETA; t++) {
-        for (int r = 0; r < RHO_RES; r++) {
-          uint16_t acc_value = accumulator[t][r];
-          accumulator[t][r] = 0; // Clear accumulator after reading its value
-            if (!(acc_value > threshold)) {
-                continue; // Not a line, skip
+        for (int r = 0; r < N_RHO; r++) {
+            uint16_t acc_value = accumulator[t][r];
+            if (acc_value <= THRESHOLD_PEAK) {
+                accumulator[t][r] = 0; // Clear it out
+                continue;
             }
-            
-            // If this peak is within +-1 theta OR +-1 rho-index of an already stored top entry,
-            // treat it as the same line and keep the stronger vote (don't insert a new separate line).
-            int merged = 0;
-            for (int j = 0; j < 5; j++) {
-              if (top_lines[j] == 0) continue;
-              int dt = top_theta[j] - t;
-              if (dt < 0) dt = -dt;
-              int dr = top_rho_idx[j] - r;
-              if (dr < 0) dr = -dr;
 
-              if (dt <= 1 || dr <= 1) {
-                // Considered duplicate/nearby: merge by keeping the larger vote
-                if (acc_value > top_lines[j]) {
-                  top_lines[j] = acc_value;
-                  top_theta[j] = t;
-                  top_rho_idx[j] = r;
+            // Check 8-way neighbors to ensure this cell is a local peak
+            int is_local_max = 1;
+            for (int dt = -1; dt <= 1; dt++) {
+                for (int dr = -1; dr <= 1; dr++) {
+                    int nt = t + dt;
+                    int nr = r + dr;
+                    
+                    // Boundary checking
+                    if (nt >= 0 && nt < N_THETA && nr >= 0 && nr < N_RHO) {
+                        // If a neighbor has MORE votes, this cell is not the peak
+                        if (accumulator[nt][nr] > acc_value) {
+                            is_local_max = 0;
+                            break;
+                        }
+                    }
                 }
-                merged = 1;
-                break;
-              }
+                if (!is_local_max) break;
             }
-            if (merged) continue;
 
-            // Insert into top 5 if applicable (normal insertion)
-            for (int i = 0; i < 5; i++) {
-              if (acc_value > top_lines[i]) {
-                // Shift lower entries
-                for (int j = 4; j > i; j--) {
-                  top_lines[j] = top_lines[j - 1];
-                  top_theta[j] = top_theta[j - 1];
-                  top_rho_idx[j] = top_rho_idx[j - 1];
-                }
-                // Insert new entry
-                top_lines[i] = acc_value;
-                top_theta[i] = t;
-                top_rho_idx[i] = r;
-                break;
-              }
+            // Clear accumulator cell now that we are done with it
+            accumulator[t][r] = 0;
+
+            if (is_local_max && merged_line_count < (N_THETA * N_RHO)) {
+                merged_lines[merged_line_count].votes = acc_value;
+                merged_lines[merged_line_count].theta_idx = t;
+                merged_lines[merged_line_count].rho_idx = r;
+                merged_line_count++;
             }
         }
     }
 
-    // Print the top 5 lines detected
-    for (int i = 0; i < 5; i++) {
-      if (top_lines[i] > 0) {
-        int rho_val = (top_rho_idx[i] * SCALE_RHO) - MAX_RHO;
-        int theta_val = top_theta[i] * THETA_RES;
-        printf("%d: Line detected: Theta=%d degrees, Rho=%d pixels, Votes=%d\n", i + 1, theta_val, rho_val, top_lines[i]);
+    // ==========================================
+    // 2. Proximity Merge Pass 
+    // ==========================================
+    // Now that we only have true local peaks, merge peaks that are too close
+    for (int i = 0; i < merged_line_count - 1; i++) {
+        if (merged_lines[i].votes == 0) continue; // Skip already swallowed lines
+
+        for (int j = i + 1; j < merged_line_count; j++) {
+            if (merged_lines[j].votes == 0) continue;
+
+            int theta_delta = thetaIdxToDegrees(merged_lines[i].theta_idx) - thetaIdxToDegrees(merged_lines[j].theta_idx);
+            if (theta_delta < 0) theta_delta = -theta_delta;
+
+            int rho_delta = rhoIdxToPixels(merged_lines[i].rho_idx) - rhoIdxToPixels(merged_lines[j].rho_idx);
+            if (rho_delta < 0) rho_delta = -rho_delta;
+
+            // If they fall within your defined window, merge them!
+            if (theta_delta <= MERGE_THETA_DELTA && rho_delta <= MERGE_RHO_DELTA) {
+                // Keep the one with higher votes, invalidate the weaker one
+                if (merged_lines[i].votes >= merged_lines[j].votes) {
+                    merged_lines[i].votes += merged_lines[j].votes; // optionally pool votes
+                    merged_lines[j].votes = 0; // eliminate j
+                } else {
+                    merged_lines[j].votes += merged_lines[i].votes;
+                    merged_lines[i].votes = 0; // eliminate i
+                    break; // i is dead, stop checking neighbors for it
+                }
+            }
+        }
+    }
+    
+
+    // Sort lines by vote count
+    for (int i = 0; i < merged_line_count - 1; i++) {
+      for (int j = i + 1; j < merged_line_count; j++) {
+        if (merged_lines[j].votes > merged_lines[i].votes) {
+          LinePeak tmp = merged_lines[i];
+          merged_lines[i] = merged_lines[j];
+          merged_lines[j] = tmp;
+        }
       }
     }
+
+
+    // Print the top 3 merged lines detected
+    uint32_t rho_vals [TOP_LINE_COUNT] = {0};
+    uint32_t theta_vals [TOP_LINE_COUNT] = {0};
+    for (int i = 0; i < TOP_LINE_COUNT && i < merged_line_count; i++) {
+        rho_vals[i] = merged_lines[i].rho_idx;
+        theta_vals[i] = merged_lines[i].theta_idx * THETA_RES;
+        printf("%d: Line detected: Theta=%d degrees, Rho=%d pixels, Votes=%d\n", i + 1, theta_vals[i], rhoIdxToPixels(rho_vals[i]), merged_lines[i].votes);
+      }
+    setLineParameters(theta_vals[0], rho_vals[0], theta_vals[1], rho_vals[1], theta_vals[2], rho_vals[2]);
     printf("=====\n");
 
     // Draw lines on RGB image

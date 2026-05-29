@@ -423,6 +423,12 @@ void setSobelMode(int mode) {
   asm volatile ("l.nios_rrr r0,%[in1],%[in2],0x7"::[in1]"r"(10),[in2]"r"(mode_32));
 }
 
+void setLineParameters(uint32_t theta0, uint32_t rho0, uint32_t theta1, uint32_t rho1, uint32_t theta2, uint32_t rho2) {
+  uint32_t valueA = ((rho2 & 0xFF) << 12) | ((theta2 & 0xFF) << 4) | 11; // 11 is cmd number for line parameters
+  uint32_t valueB = ((rho1 & 0xFF) << 24) | ((theta1 & 0xFF) << 16) | ((rho0 & 0xFF) << 8) | (theta0 & 0xFF);
+  asm volatile ("l.nios_rrr r0,%[in1],%[in2],0x7"::[in1]"r"(valueA),[in2]"r"(valueB));
+}
+
 uint32_t pollSingleShotDone() {
   uint32_t result;
   asm volatile ("l.nios_rrc %[out1],%[in1],r0,0x7":[out1]"=r"(result):[in1]"r"(7));

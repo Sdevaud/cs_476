@@ -50,6 +50,14 @@ module tb_camera();
         ciStart = 0;
         #100 @(posedge clock);
 
+        // 4. Test Custom Instruction: Set Line Data
+        //valueB[31:0] = {rho1, theta1, rho0, theta0}, valueA[31:0] = {12'd0, rho2, theta2, 4'd11})
+        ciN = 8'd0; ciValueB = {8'd101, 8'd0, 8'd50, 8'd90};
+        ciValueA = {12'd0, 8'd200, 8'd135, 4'd11};
+        ciStart = 1;
+        #10 @(posedge clock);
+        ciStart = 0;
+
         // 2. Mock a Video Frame (4 lines, 16 pixels each)
         vsync = 1; #200; vsync = 0; // Start Frame
         
@@ -86,6 +94,8 @@ module tb_camera();
         #10 @(posedge clock);
         ciStart = 0;
         $display("CI Result (Pixel Count): %d", ciResult);
+        #10 @(posedge clock);
+        
 
 
         #100 $finish;
