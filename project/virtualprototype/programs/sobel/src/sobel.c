@@ -4,7 +4,7 @@
 #include <vga.h>
 #include <stdbool.h>
 
-// #define __profiling__
+#define __profiling__
 
 const uint16_t largeur = 640;
 const uint16_t hauteur = 480;
@@ -29,31 +29,33 @@ const uint16_t white = 0xFFFF;
 
 const uint32_t setThreshold = 0xFF << 24;
 
-const uint32_t delayRefresh = 7;
+const uint32_t delayRefresh = 50;
 
 void write_DMA(const uint32_t address, const uint32_t data)
 { // the ci ID is 0xA5 -> 165 in decimal
   asm volatile("l.nios_rrr r0,%[in1],%[in2],165" ::[in1] "r"(address | WRITE_OPERATION), [in2] "r"(data));
 }
 
-void read_DMA(const uint32_t address, volatile uint32_t *data)
+uint32_t read_DMA(const uint32_t address)
 {
-  asm volatile("l.nios_rrr %[out1],%[in1],r0,165" : [out1] "=r"(*data) : [in1] "r"(address));
+  uint32_t data = 0;
+  asm volatile("l.nios_rrr %[out1],%[in1],r0,165" : [out1] "=r"(data) : [in1] "r"(address));
+  return data;
 }
 
 void wait_DMA()
 {
-  uint32_t data;
+  uint32_t data = 0;
   do
   {
-    read_DMA(STATUS_CTRL, &data);
+    data = read_DMA(STATUS_CTRL);
   } while (data & 1); // wait until the busy bit is zero
 }
 
-uint32_t complementary(const volatile uint32_t *pixelActualFrame, const volatile uint32_t *pixelPreviousFrame)
+uint32_t complementary(uint32_t pixelActualFrame, uint32_t pixelPreviousFrame)
 {
   uint32_t move = 0;
-  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],40" : [out1] "=r"(move) : [in1] "r"(*pixelActualFrame), [in2] "r"(*pixelPreviousFrame));
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],40" : [out1] "=r"(move) : [in1] "r"(pixelActualFrame), [in2] "r"(pixelPreviousFrame));
   return move;
 }
 
@@ -63,9 +65,9 @@ uint32_t white_counter(const volatile uint32_t *pixelActualFrame) {
   return whitePixel;
 }
 
-uint32_t intersection_counter(const volatile uint32_t* actualPixel, const volatile uint32_t* previousPixel) {
-  volatile uint32_t sobelPixel = 0u;
-  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],44" : [out1] "=r"(sobelPixel) : [in1] "r"(*actualPixel), [in2] "r"(*previousPixel));
+uint32_t intersection_counter(uint32_t actualPixel, uint32_t previousPixel) {
+  uint32_t sobelPixel = 0u;
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],44" : [out1] "=r"(sobelPixel) : [in1] "r"(actualPixel), [in2] "r"(previousPixel));
   return sobelPixel;
 }
 
@@ -96,15 +98,15 @@ void swap_buffer(uint32_t *buffer1, uint32_t *buffer2)
   *buffer2 = transition;
 }
 
-bool jaccard(const volatile uint32_t* unionPreviousActualPicture, const volatile uint32_t* IntersectionPreviousActualPicture) {
+bool jaccard(uint32_t unionPreviousActualPicture, uint32_t IntersectionPreviousActualPicture) {
   volatile uint32_t move = 0u;
-  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],42" : [out1] "=r"(move) : [in1] "r"(*unionPreviousActualPicture), [in2] "r"(*IntersectionPreviousActualPicture));
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],42" : [out1] "=r"(move) : [in1] "r"(unionPreviousActualPicture), [in2] "r"(IntersectionPreviousActualPicture));
   return move == 1u;
 }
 
-bool dice(uint32_t totalwhitepixel, const volatile uint32_t* IntersectionPreviousActualPicture) {
+bool dice(uint32_t totalwhitepixel, uint32_t IntersectionPreviousActualPicture) {
   volatile uint32_t move = 0u;
-  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],43" : [out1] "=r"(move) : [in1] "r"(totalwhitepixel), [in2] "r"(*IntersectionPreviousActualPicture));
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],43" : [out1] "=r"(move) : [in1] "r"(totalwhitepixel), [in2] "r"(IntersectionPreviousActualPicture));
   return move == 1u;
 }
 
@@ -124,18 +126,18 @@ int main()
   volatile uint8_t* previousSobel = previousSobelTab;
   volatile uint8_t* actualSobel = actualSobelTab;
 
-  volatile bool actualMovement = false;
-  volatile bool frameMovement = false;
-  volatile uint32_t whitePixelCounterActual = 0;
-  volatile uint32_t whitePixelCounterPrevious = 0;
-  volatile uint32_t unionPreviousActualPicture = 0;
-  volatile uint32_t IntersectionPreviousActualPicture = 0;
-  volatile uint32_t ComplementaryPreviousActualPicture = 0;
+  bool actualMovement = false;
+  bool frameMovement = false;
+  uint32_t whitePixelCounterActual = 0;
+  uint32_t whitePixelCounterPrevious = 0;
+  uint32_t unionPreviousActualPicture = 0;
+  uint32_t IntersectionPreviousActualPicture = 0;
+  uint32_t ComplementaryPreviousActualPicture = 0;
   
   volatile uint32_t result, cycles, stall, idle;
-  volatile uint32_t timeCounter = 0;
+  uint32_t timeCounter = 0;
   volatile unsigned int *vga = (unsigned int *)0X50000020;
-  volatile unsigned int *gpio = (unsigned int *)0x40000000;
+  // volatile unsigned int *gpio = (unsigned int *)0x40000000;
   camParameters camParams;
   vga_clear();
 
@@ -178,8 +180,8 @@ int main()
 
     if (frameMovement) {
       ++timeCounter;
-      // printf("hello \n");
       if (timeCounter > delayRefresh) {
+        printf("hello \n");
         frameMovement = false;
         timeCounter = 0;
         vga[3] = swap_u32((uint32_t) blackScreen);
@@ -187,7 +189,8 @@ int main()
     }
 
 #ifdef __profiling__
-    reset_profiling();
+    volatile uint32_t result, cycles, stall, idle;
+    asm volatile ("l.nios_rrr r0,r0,%[in2],0xC"::[in2]"r"(7));
 #endif
 
     /* INIT DMA for first pass */
@@ -220,24 +223,30 @@ int main()
       }
 
       for (size_t pixel = 0; pixel < USED_BLOCK_SIZE; ++pixel) {
-        read_DMA(previousBuffer2 + pixel, &previousPixel);
-        read_DMA(actualBuffer2 + pixel, &actualPixel);
+        previousPixel = read_DMA(previousBuffer2 + pixel);
+        actualPixel = read_DMA(actualBuffer2 + pixel);
 
-        ComplementaryPreviousActualPicture += complementary(&actualPixel, &previousPixel);
+        ComplementaryPreviousActualPicture += complementary(actualPixel, previousPixel);
         // whitePixelCounterActual += white_counter(&actualPixel);
-        IntersectionPreviousActualPicture += intersection_counter(&actualPixel, &previousPixel);
+        IntersectionPreviousActualPicture += intersection_counter(actualPixel, previousPixel);
       } // DMA Pass
 
       wait_DMA();
 
+      previousPtr -= USED_BLOCK_SIZE * sizeof(uint32_t);
+      write_DMA(BUS_START, previousPtr);
+      write_DMA(MEMORY_START, actualBuffer2);
+      write_DMA(STATUS_CTRL, 2);
+      wait_DMA();
+
       swap_buffer(&previousBuffer1, &previousBuffer2);
       swap_buffer(&actualBuffer1, &actualBuffer2);
-      previousPtr += USED_BLOCK_SIZE * sizeof(uint32_t);
+      previousPtr += 2*USED_BLOCK_SIZE * sizeof(uint32_t);
       actualPtr += USED_BLOCK_SIZE * sizeof(uint32_t);
     } // one frame
 
     unionPreviousActualPicture = ComplementaryPreviousActualPicture + IntersectionPreviousActualPicture;
-    actualMovement = jaccard(&unionPreviousActualPicture, &IntersectionPreviousActualPicture);
+    actualMovement = jaccard(unionPreviousActualPicture, IntersectionPreviousActualPicture);
     // actualMovement = dice(whitePixelCounterActual + whitePixelCounterPrevious, &IntersectionPreviousActualPicture);
 
     if (actualMovement) {
@@ -252,14 +261,12 @@ int main()
     whitePixelCounterPrevious = whitePixelCounterActual;
     whitePixelCounterActual = 0;
 
-    volatile uint8_t *tmp = previousSobel;
-    previousSobel = actualSobel;
-    actualSobel = tmp;
 
 #ifdef __profiling__
-    profiling((1 << 8 | 7 << 4), &cycles);
-    profiling((1 << 9), &stall);
-    profiling((1 << 10), &idle);
+    asm volatile ("l.nios_rrr %[out1],r0,%[in2],0xC":[out1]"=r"(cycles):[in2]"r"(1<<8|7<<4));
+    asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],0xC":[out1]"=r"(stall):[in1]"r"(1),[in2]"r"(1<<9));
+    asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],0xC":[out1]"=r"(idle):[in1]"r"(2),[in2]"r"(1<<10));
+    printf("nrOfCycles: %d %d %d\n", cycles, stall, idle);
 #endif
 
   } // end while(1)
