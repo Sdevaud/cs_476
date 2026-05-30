@@ -3,6 +3,8 @@
 #include <swap.h>
 #include <vga.h>
 
+#define __profiling__
+
 // === DMA Config ===
 #define WRITE_OPERATION (1<<10)
 #define BUS_START (1<<11)
@@ -81,7 +83,7 @@ uint8_t sobel[640*480];
 uint16_t rgb565[640*480];
 
 int main () {
-  volatile uint32_t result, cycles,stall,idle;
+  volatile uint32_t result;
   volatile unsigned int *vga = (unsigned int *) 0X50000020;
   camParameters camParams;
   vga_clear();
@@ -98,9 +100,9 @@ int main () {
     }
   }
 
-  printf("Starting Line Detection!\n" );
+  // printf("Starting Line Detection!\n" );
   camParams = initOv7670(VGA);
-  printf("...\n" );
+  // printf("...\n" );
   result = (camParams.nrOfPixelsPerLine <= 320) ? camParams.nrOfPixelsPerLine | 0x80000000 : camParams.nrOfPixelsPerLine;
   vga[0] = swap_u32(result);
   result =  (camParams.nrOfLinesPerImage <= 240) ? camParams.nrOfLinesPerImage | 0x80000000 : camParams.nrOfLinesPerImage;
@@ -109,14 +111,23 @@ int main () {
   vga[3] = swap_u32((uint32_t) &rgb565[0]);
 
   setSobelThreshold(100);
+
+#ifdef __profiling__
+  volatile uint32_t  cycles, stall, idle;
+  asm volatile ("l.nios_rrr r0,r0,%[in2],0xC"::[in2]"r"(7));
+#endif
   
   while(1) {
-
+      
     setSobelMode(0);
     takeSingleImageBlocking((uint32_t) &rgb565[0]);
 
     setSobelMode(1);
     takeSingleImageBlocking((uint32_t) &sobel[0]);
+
+#ifdef __profiling__
+    asm volatile ("l.nios_rrr r0,r0,%[in2],0xC"::[in2]"r"(7));
+#endif
 
     // dummy data into sobel
     // for (int i = 0; i < 640*480; i++) {
@@ -307,10 +318,17 @@ int main () {
     for (int i = 0; i < TOP_LINE_COUNT && i < merged_line_count; i++) {
         rho_vals[i] = merged_lines[i].rho_idx;
         theta_vals[i] = merged_lines[i].theta_idx * THETA_RES;
-        printf("%d: Line detected: Theta=%d degrees, Rho=%d pixels, Votes=%d\n", i + 1, theta_vals[i], rhoIdxToPixels(rho_vals[i]), merged_lines[i].votes);
+        // printf("%d: Line detected: Theta=%d degrees, Rho=%d pixels, Votes=%d\n", i + 1, theta_vals[i], rhoIdxToPixels(rho_vals[i]), merged_lines[i].votes);
       }
     setLineParameters(theta_vals[0], rho_vals[0], theta_vals[1], rho_vals[1], theta_vals[2], rho_vals[2]);
-    printf("=====\n");
+    // printf("=====\n");
+
+#ifdef __profiling__
+    asm volatile ("l.nios_rrr %[out1],r0,%[in2],0xC":[out1]"=r"(cycles):[in2]"r"(1<<8|7<<4));
+    asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],0xC":[out1]"=r"(stall):[in1]"r"(1),[in2]"r"(1<<9));
+    asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],0xC":[out1]"=r"(idle):[in1]"r"(2),[in2]"r"(1<<10));
+    printf("nrOfCycles: %d %d %d\n", cycles, stall, idle);
+#endif
 
     // Draw lines on RGB image
 
