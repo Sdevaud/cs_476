@@ -1,3 +1,14 @@
+/*
+Date Created: 30.05.2026
+main fomrula : |A ∩ B| = number of pixels that are white in both A and B
+
+A : this is the actual frame
+B : this is the previous frame (one step back in the pipeline)
+so A and B are the esnemble of white pixels in the actual and previous frame respectively.
+
+this module compute for a word of 32 bits (4 pixels) 
+*/
+
 module intersection #(parameter [7:0] customInstructionId = 8'd44 )
                            ( input wire         start,
                              input wire [31:0]  valueA,

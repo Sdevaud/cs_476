@@ -36,7 +36,63 @@ This reduces unnecessary pixel transfers and conversions, making the processing 
 
 The main drawback is that motion detection is done on black and white Sobel pixels instead of grayscale values. This makes the result more sensitive to noise, so additional operations over the full pixel set are required to make the detection more stable.
 
-## 2. How find modify file and How to Run
+## 2. Modified Files and How to Run
+
+All modified Verilog files are located in:
+
+```text
+project/virtualprototype/modules/sobel/verilog
+```
+
+This folder contains:
+
+```text
+test_bench/          Verilog test benches
+camera_optimised.v   Camera module with direct streaming conversion
+sobel.v              Sobel computation module
+```
+
+Several motion detection implementations were tested:
+
+```text
+dice.v
+jaccard.v
+white_counter.v
+complementary.v
+```
+
+The memory modules used are:
+
+```text
+ram2kdp.v
+ram640640dp.v
+```
+
+We also reused solutions from previous PWs:
+
+```text
+rgb565Grayscale.v
+rgb565ISE.v
+```
+
+The following files were adapted to connect the new modules to the system:
+
+```text
+yosysOr1420.script
+or1420SingleCore.v
+```
+
+Most of the added code is located near the end of these files.
+
+The software projects are located in:
+
+```text
+project/virtualprototype/programs
+```
+
+The `sobel` folder contains the main project used for the presentation and grading.
+The `test` folder contains the main alternative versions that were tested during development. These methods are summarized in the results section.
+
 
 
 ## 3. Result Analysis and Benchmarks

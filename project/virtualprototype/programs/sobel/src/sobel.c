@@ -25,7 +25,7 @@ const uint32_t unitaryBuffer = sizeDMA / (nbrPixelPerPass * nbrBuffer); // 128
 
 
 // ==========================================
-// Camera global variable and constants
+// Camera global variables and constants
 // ==========================================
 const uint16_t largeur = 640;
 const uint16_t hauteur = 480;
@@ -39,7 +39,7 @@ volatile uint8_t B_SobelTab[640 * 480];
 volatile uint8_t blackScreen[640 * 480];
 
 // ==========================================
-// prototyp functions
+// Function prototypes
 // ==========================================
 void f_write_DMA(const uint32_t address, const uint32_t data);
 uint32_t f_read_DMA(const uint32_t address);
@@ -57,7 +57,7 @@ void f_set_threshold();
 
 int main() {
 // ==========================================
-// variable for motion detection
+// Variables for motion detection
 // ==========================================
   bool movement = false;
   bool frameMovement = false;
@@ -75,7 +75,7 @@ int main() {
 #endif
 
 // ==========================================
-// Init FPGA
+// Initialize FPGA
 // ==========================================
   volatile uint32_t result;
   volatile unsigned int *vga = (unsigned int *)0X50000020;
@@ -98,7 +98,7 @@ int main() {
   vga[3] = swap_u32((uint32_t) blackScreen);
 
 // ==========================================
-// Init first Frame
+// Initialize first frame
 // ==========================================
   f_write_DMA(BLOCK_SIZE, USED_BLOCK_SIZE);
   f_write_DMA(BURST_SIZE, USED_BURST_SIZE);
@@ -115,7 +115,7 @@ int main() {
 #endif
 
 // ==========================================
-// Init buufer and ptr
+// Initialize buffers and pointers
 // ==========================================
     uint32_t B_Buffer1 = unitaryBuffer * 0;
     uint32_t B_Buffer2 = unitaryBuffer * 1;
@@ -130,7 +130,7 @@ int main() {
 
 
 // ==========================================
-// INIT DMA for first pass
+// Initialize DMA for the first pass
 // ==========================================
     f_write_DMA(BUS_START, PtrB);
     f_write_DMA(MEMORY_START, B_Buffer1);
@@ -148,7 +148,7 @@ int main() {
 
     for (uint32_t loop = 0; loop < 600; ++loop) {
 // ==========================================
-// INIT DMA for first pass
+// Initialize DMA for the first pass
 // ==========================================
       if (loop < 599) {
         f_write_DMA(BUS_START, PtrB);
@@ -162,7 +162,7 @@ int main() {
       }
 
 // ==========================================
-// Count number of pixel 4 by 4
+// Count the number of pixels 4 by 4
 // ==========================================
       for (size_t pixel = 0; pixel < USED_BLOCK_SIZE; ++pixel) {
         pixelB = f_read_DMA(B_Buffer2 + pixel);
@@ -191,7 +191,7 @@ int main() {
     } // one frame
 
 // ==========================================
-// Compute if movement
+// Compute if there is movement
 // ==========================================
     unionAB = ComplementaryAB + IntersectionAB;
     movement = f_jaccard(unionAB, IntersectionAB);
@@ -213,7 +213,7 @@ int main() {
     }
 
 // ==========================================
-// reset and update variable
+// Reset and update variables
 // ==========================================
     unionAB = 0;
     IntersectionAB = 0;
@@ -235,7 +235,7 @@ int main() {
 
 
 // ==========================================
-// definition of the function
+// Function definitions
 // ==========================================
 
 void f_write_DMA(const uint32_t address, const uint32_t data) { // the ci ID is 0xA5 -> 165 in decimal
@@ -310,6 +310,6 @@ bool f_dice(uint32_t totalwhitepixel, uint32_t IntersectionAB) {
 }
 
 void f_set_threshold() {
-  asm volatile("l.nios_rrr r0,%[in1],%[in2],42" ::[in1] "r"(setThreshold), [in2] "r"(30));
-  asm volatile("l.nios_rrr r0,%[in1],%[in2],43" ::[in1] "r"(setThreshold), [in2] "r"(30));
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],42" ::[in1] "r"(setThreshold), [in2] "r"(20));
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],43" ::[in1] "r"(setThreshold), [in2] "r"(20));
 }

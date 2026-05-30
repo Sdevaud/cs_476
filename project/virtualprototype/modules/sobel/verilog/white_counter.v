@@ -1,3 +1,8 @@
+/*
+Date Created: 30.05.2026
+main fomrula : we basicly compue the number of white pixels in a 32 bit word (4 pixels) 
+*/
+
 module whiteCounter #(parameter [7:0] customInstructionId = 8'd41 )
                            ( input wire         start,
                              input wire [31:0]  valueA,

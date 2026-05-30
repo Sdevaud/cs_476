@@ -1,3 +1,15 @@
+/*
+Date Created: 30.05.2026
+source : https://en.wikipedia.org/wiki/Dice-S%C3%B8rensen_coefficient
+main fomrula : Ds = 1 - DSC = 1 - 2|A ∩ B| / (|A| + |B|)
+
+A : this is the actual frame
+B : this is the previous frame (one step back in the pipeline)
+so A and B are the esnemble of white pixels in the actual and previous frame respectively.
+
+you cant set the threshold from the C code with valueA[31:24] == 8'hFF, threshold value is in valueB[7:0].
+*/
+
 module dice #(parameter [7:0] customInstructionId = 8'd43 )
                            ( input wire         clock,
                              input wire         reset,

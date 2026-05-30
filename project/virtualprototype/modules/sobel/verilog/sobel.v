@@ -1,3 +1,25 @@
+/*
+date : 20.05.2026
+source : https://homepages.inf.ed.ac.uk/rbf/HIPR2/sobel.htm
+
+formula : 
+
+we use this window for compute the gradients : 
+
+ Gx = [-1  0  1]  Gy = [-1 -2 -1]
+      [-2  0  2]       [ 0  0  0]
+      [-1  0  1]       [ 1  2  1]
+
+this is basicly : 
+Gx = (p13 + 2*p23 + p33) - (p11 + 2*p21 + p31)
+Gy = (p31 + 2*p32 + p33) - (p11 + 2*p12 + p13)
+
+return : if (|Gx| + |Gy|) > threshold then 255 else 0
+
+we assume for pixels in the border of the image 
+that they are black (0) to avoid out of bound access.
+*/
+
 module sobelCompute (
     input  wire [7:0]  p11,
     input  wire [7:0]  p12,
@@ -14,11 +36,6 @@ module sobelCompute (
 
     output wire [7:0]  sobelResult
 );
-
-    // Compute Sobel gradients
-    // Gx = [-1  0  1]  Gy = [-1 -2 -1]
-    //      [-2  0  2]       [ 0  0  0]
-    //      [-1  0  1]       [ 1  2  1]
 
     // Extended to 9 bits to prevent overflow during multiplication by 2 (left shift)
     wire [8:0] p11e = {1'b0, p11};
