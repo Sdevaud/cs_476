@@ -110,7 +110,6 @@ int main() {
 
 
 #ifdef __profiling__
-    volatile uint32_t result, cycles, stall, idle;
     asm volatile ("l.nios_rrr r0,r0,%[in2],0xC"::[in2]"r"(7));
 #endif
 

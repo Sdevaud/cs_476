@@ -162,28 +162,21 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
    * Here the grabber is defined
    *
    */
-  reg [7:0] s_byte7Reg, s_byte6Reg,s_byte5Reg,s_byte4Reg, s_byte3Reg,s_byte2Reg,s_byte1Reg,s_byte0Reg;
+  reg [7:0] s_byte3Reg,s_byte2Reg,s_byte1Reg,s_byte4Reg,s_byte5Reg,s_byte6Reg,s_byte7Reg;
   reg [8:0] s_busSelectReg;
   wire [31:0] s_busPixelWord;
-
-  /* ==== Added by Sebastien ==== */
-
-  wire [7:0] gray0, gray1, gray2, gray3;
-  rgb565Grayscale Gray0 (.rgb565({s_byte7Reg, s_byte6Reg}),
-                         .grayscale(gray0));
-  rgb565Grayscale Gray1 (.rgb565({s_byte5Reg, s_byte4Reg}),
-                          .grayscale(gray1));
-  rgb565Grayscale Gray2 (.rgb565({s_byte3Reg, s_byte2Reg}),
-                         .grayscale(gray2));
-  rgb565Grayscale Gray3 (.rgb565({s_byte1Reg, s_byte0Reg}),
-                          .grayscale(gray3));                        
-
-  // Convert again into RGB565 format but grayscale
-  wire [31:0] s_grayscalePixelWord = {gray3, gray2, gray1, gray0}; 
-  /* =======================*/
-                
+  wire [7:0] s_pixel1, s_pixel2,s_pixel3,s_pixel4;
+  wire [31:0] s_rgb565Grayscale = {s_pixel4,s_pixel3,s_pixel2,s_pixel1};
   wire s_weLineBuffer = (s_pixelCountReg[2:0] == 3'b111) ? hsync : 1'b0;
-  
+
+  rgb565Grayscale gray1 ( .rgb565({s_byte7Reg,s_byte6Reg}),
+                          .grayscale(s_pixel1) );
+  rgb565Grayscale gray2 ( .rgb565({s_byte5Reg,s_byte4Reg}),
+                          .grayscale(s_pixel2) );
+  rgb565Grayscale gray3 ( .rgb565({s_byte3Reg,s_byte2Reg}),
+                          .grayscale(s_pixel3) );
+  rgb565Grayscale gray4 ( .rgb565({s_byte1Reg,camData}),
+                          .grayscale(s_pixel4) );
   always @(posedge pclk)
     begin
       s_byte7Reg <= (s_pixelCountReg[2:0] == 3'b000 && hsync == 1'b1) ? camData : s_byte7Reg;
@@ -193,211 +186,14 @@ module camera #(parameter [7:0] customInstructionId = 8'd0,
       s_byte3Reg <= (s_pixelCountReg[2:0] == 3'b100 && hsync == 1'b1) ? camData : s_byte3Reg;
       s_byte2Reg <= (s_pixelCountReg[2:0] == 3'b101 && hsync == 1'b1) ? camData : s_byte2Reg;
       s_byte1Reg <= (s_pixelCountReg[2:0] == 3'b110 && hsync == 1'b1) ? camData : s_byte1Reg;
-      s_byte0Reg <= (s_pixelCountReg[2:0] == 3'b111 && hsync == 1'b1) ? camData : s_byte0Reg;
     end
-
-  // ==== Added by Till ====  
-
-  // Indices to keep track of which line buffer to write into
-  reg [1:0] bufferSelectReg; // 0 -> 1 -> 2 -> 0 -> ...
-  reg [1:0] bufferBeforeReg; // 2 -> 0 -> 1 -> 2 -> ...
-  reg [1:0] bufferBeforeBeforeReg; // 1 -> 2 -> 0 -> 1 -> ...
-  always @(posedge pclk) begin
-      if (reset == 1'b1 || s_vsyncNegEdge == 1'b1)
-      begin // Every time a new frame starts (vsync neg edge)
-          bufferSelectReg <= 2'd0;
-          bufferBeforeReg <= 2'd1;
-          bufferBeforeBeforeReg <= 2'd2;
-      end 
-      else if (s_hsyncNegEdge == 1'b1)
-      begin
-          // Every time line ends (hsync neg edge)
-          bufferSelectReg <= (bufferSelectReg == 2'd0) ? 2'd2 : bufferSelectReg - 2'd1;
-          bufferBeforeReg <= (bufferBeforeReg == 2'd0) ? 2'd2 : bufferBeforeReg - 2'd1;
-          bufferBeforeBeforeReg <= (bufferBeforeBeforeReg == 2'd0) ? 2'd2 : bufferBeforeBeforeReg - 2'd1;
-      
-      end
-  end
-
-  wire weBuffer0 = (s_pixelCountReg[2:0] == 3'b111 && bufferSelectReg == 2'd0) ? hsync : 1'b0;
-  wire weBuffer1 = (s_pixelCountReg[2:0] == 3'b111 && bufferSelectReg == 2'd1) ? hsync : 1'b0;
-  wire weBuffer2 = (s_pixelCountReg[2:0] == 3'b111 && bufferSelectReg == 2'd2) ? hsync : 1'b0;
-
-  wire [31:0] busPixelWord0, busPixelWord1, busPixelWord2;
-  wire [7:0] lineBufferAddr = s_pixelCountReg[10:3];
-
-  dualPortRam640 lineBuffer0 ( .address1 (lineBufferAddr),
-                              .address2(lineBufferAddr),
-                              .clock1(pclk), // Input clock (camera)
-                              .clock2(pclk), // Output clock (cpu)
-                              .writeEnable(weBuffer0),
-                              .dataIn1(s_grayscalePixelWord),
-                              .dataOut2(busPixelWord0));
-  dualPortRam640 lineBuffer1 ( .address1 (lineBufferAddr),
-                              .address2(lineBufferAddr),
-                              .clock1(pclk), // Input clock (camera)
-                              .clock2(pclk), // Output clock (cpu)
-                              .writeEnable(weBuffer1),
-                              .dataIn1(s_grayscalePixelWord),
-                              .dataOut2(busPixelWord1));
-  dualPortRam640 lineBuffer2 ( .address1 (lineBufferAddr),
-                              .address2(lineBufferAddr),
-                              .clock1(pclk), // Input clock (camera)
-                              .clock2(pclk), // Output clock (cpu)
-                              .writeEnable(weBuffer2),
-                              .dataIn1(s_grayscalePixelWord),
-                              .dataOut2(busPixelWord2));
-
-  // Read from line buffers in correct order
-  // [p11] [p12] [p13]
-  // [p21] [p22] [p23]
-  // [p31] [p32] [p33] <- new pixel from camera
-  reg [7:0] p11, p12, p13, p21, p22, p23, p31, p32, p33;
-  wire [1:0] groupCount = s_pixelCountReg[2:1]; // keeps track of which pixel in the current 4-pixel group we are at (00, 01, 10, 11)
-
-  // 1. Pick the "current" grayscale pixel from the 4 available based on camera timing
-  // This is going to be p33 in the 3x3 window
-  reg [7:0] current_cam_gray;
-  always @* begin
-      case (groupCount)
-          2'b00: current_cam_gray = gray0;
-          2'b01: current_cam_gray = gray1;
-          2'b10: current_cam_gray = gray2;
-          2'b11: current_cam_gray = gray3;
-          default: current_cam_gray = 8'd0;
-      endcase
-  end
-
-  // 2. Pick the corresponding pixels from the Top and Mid Line Buffers
-  wire [31:0] busPixelWordBefore = (bufferBeforeReg == 2'd0) ? busPixelWord0 :
-                                  (bufferBeforeReg == 2'd1) ? busPixelWord1 :
-                                                              busPixelWord2;
-  // p23
-  wire [7:0] current_mid_gray = (groupCount == 2'b00) ? busPixelWordBefore[7:0]   :
-                                (groupCount == 2'b01) ? busPixelWordBefore[15:8]  :
-                                (groupCount == 2'b10) ? busPixelWordBefore[23:16] :
-                                busPixelWordBefore[31:24];
-                                                       
-                                
-  wire [31:0] busPixelWordBeforeBefore = (bufferBeforeBeforeReg == 2'd0) ? busPixelWord0 :
-                                         (bufferBeforeBeforeReg == 2'd1) ? busPixelWord1 :
-                                                                           busPixelWord2;
-  // p13                                                                        
-  wire [7:0] current_top_gray = (groupCount == 2'b00) ? busPixelWordBeforeBefore[7:0]   :
-                                (groupCount == 2'b01) ? busPixelWordBeforeBefore[15:8]  :
-                                (groupCount == 2'b10) ? busPixelWordBeforeBefore[23:16] :
-                                                        busPixelWordBeforeBefore[31:24];
-
-
-  reg [7:0] current_cam_gray_delayed;
-  // reg [7:0] current_mid_gray_delayed;
-  // reg [7:0] current_top_gray_delayed;
-  reg       shift_enable_delayed;
-
-  always @(posedge pclk) begin
-      // 1. Delay the camera pixel by 1 cycle
-      current_cam_gray_delayed <= current_cam_gray;
-
-      // 2. Delay the RAM-sourced pixels by 1 cycle (to match the read latency)
-      // current_mid_gray_delayed <= current_mid_gray;
-      // current_top_gray_delayed <= current_top_gray;
-
-      // 3. Delay the shift signal
-      shift_enable_delayed <= (hsync && s_pixelCountReg[0] == 1'b1);
-  end
-
-  // 3. Shift the window every time a 16-bit pixel pair finishes (every 2nd camData byte)
-  always @(posedge pclk) begin
-      if (!hsync) begin
-        // Reset the window at the start of every line
-        p11 <= 0; p12 <= 0; p13 <= 0;
-        p21 <= 0; p22 <= 0; p23 <= 0;
-        p31 <= 0; p32 <= 0; p33 <= 0;
-
-      end else if (shift_enable_delayed) begin
-          p11 <= p12; 
-          p12 <= p13;
-          p21 <= p22; 
-          p22 <= p23;
-          p31 <= p32; 
-          p32 <= p33;
-
-          p33 <= current_cam_gray_delayed; // Newest pixel from camera
-          p23 <= current_mid_gray; // Corresponding pixel from 1 line ago
-          p13 <= current_top_gray; // Corresponding pixel from 2 lines ago
-      end
-  end
   
-  // Compute Sobel gradients
-  // Gx = [-1  0  1]  Gy = [-1 -2 -1]
-  //      [-2  0  2]       [ 0  0  0]
-  //      [-1  0  1]       [ 1  2  1]
-
-  // Zero-extend to 11 bits to prevent overflow during addition
-  // wire signed [11:0] gx = (p13 + (p23 << 1) + p33) - (p11 + (p21 << 1) + p31);
-  // wire signed [11:0] gy = (p31 + (p32 << 1) + p33) - (p11 + (p12 << 1) + p13);
-
-  wire signed [11:0] gx = ($signed({1'b0, p13}) + $signed({1'b0, p23} << 1) + $signed({1'b0, p33})) 
-                      - ($signed({1'b0, p11}) + $signed({1'b0, p21} << 1) + $signed({1'b0, p31}));
-
-  wire signed [11:0] gy = ($signed({1'b0, p31}) + $signed({1'b0, p32} << 1) + $signed({1'b0, p33})) 
-                      - ($signed({1'b0, p11}) + $signed({1'b0, p12} << 1) + $signed({1'b0, p13}));
-  
-  wire [12:0] magnitude = (gx<0 ? -gx : gx) + (gy<0 ? -gy : gy);
-
-  wire isBorder = (s_lineCountReg <= 11'd1) || (s_pixelCountReg <= 11'd1); 
-
-  wire [7:0] sobelActual = (magnitude > 13'd120) ? 8'hFF : 8'h00;
-
-  // Final Result: If on border, force black. Otherwise, use Sobel.
-  wire [7:0] sobelResult = (isBorder) ? 8'h00 : sobelActual;
-  // debug
-  // wire [7:0] sobelResult = current_mid_gray;
-
-
-  // 4. Corrected Storage for the 4 results
-  reg [7:0] sobelResult0, sobelResult1, sobelResult2, sobelResult3;
-  always @(posedge pclk) begin
-      if (shift_enable_delayed) begin
-          case (groupCount)
-              2'b00: sobelResult0 <= sobelResult;
-              2'b01: sobelResult1 <= sobelResult;
-              2'b10: sobelResult2 <= sobelResult;
-              2'b11: sobelResult3 <= sobelResult;
-          endcase
-      end
-  end
-
-  wire [31:0] sobelPixelWord = {sobelResult3, sobelResult2, sobelResult1, sobelResult0};
-
-  // =======================
-
-  
-  reg s_weLineBuffer_delayed;
-  reg [8:0] s_writeAddressReg;
-  // always @(posedge pclk) begin
-  //     // Delay the write enable by one cycle so the packed word is ready
-  //     s_weLineBuffer_delayed <= storage_delayed;
-  //     s_writeAddressReg <= s_pixelCountReg[10:3];
-  // end
-
-  always @(posedge pclk) begin
-      // Only write to the 2k RAM when we have finished packing all 4 pixels (groupCount 3)
-      s_weLineBuffer_delayed <= groupCount == 2'b11;
-      
-      // The address must also be captured at this specific moment
-      if (groupCount == 2'b11) begin
-          s_writeAddressReg <= s_pixelCountReg[10:3];
-      end
-  end
-
-
-  dualPortRam2k lineBuffer ( .address1(s_writeAddressReg),
+  dualPortRam2k lineBuffer ( .address1({1'b0,s_pixelCountReg[10:3]}),
                              .address2(s_busSelectReg),
                              .clock1(pclk),
                              .clock2(clock),
-                             .writeEnable(s_weLineBuffer_delayed),
-                             .dataIn1(sobelPixelWord),
+                             .writeEnable(s_weLineBuffer),
+                             .dataIn1(s_rgb565Grayscale),
                              .dataOut2(s_busPixelWord));
 
   /*
