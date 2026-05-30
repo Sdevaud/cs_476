@@ -1,36 +1,45 @@
-#### Structure:
 
-The virtual prototype consists of three directories:
+# Embedded System Design – Final Project
 
-- modules: This directory contains the several modules that are contained in the SOC. Add your own modules in this directory. Most modules also contain a ```doc``` directory with documentation.
-- programms: This directory contains the "hello world" template that can be used as basis for your own programms.
-- systems: This directory contains all the required files for the "top level" of the SOC.
+## Group 23
 
-#### Hardware configuration files:
+- Sébastien Devaud (315144)
+- Till Beyer (414801)
 
-To be able to build the Virtual Prototype hardware, there are several files:
 
-- systems/singleCore/scripts/gecko5_or1420.lpf: This file contains the pin-mapping of the top level to the FPGA-pins. 
-- systems/singleCore/scripts/yosysOr1420.script: This file contains all the verilog files required to build your system, note that "read -sv " needs to be in each line
-- systems/singleCore/scripts/synthesizeOr1420.sh: This is a script that will perform the synthesys, P&R and will upload the bit-file to your GECKO5.
+# Project README
 
-#### Building the hardware:
+## Preamble
 
-This step is done with the OSS-cad-suite (Yosys, nextpnr, ...).
-It is completely automated, just do (in a terminal):
-cd systems/singleCore/sandbox
-../scripts/synthesizeOr1420.sh
+Our initial goal was to implement an edge detection pipeline based on the following processing chain:
 
-If you want to permenantly store the bit-file in Flash (for example for a demo), you can use (in the sandbox directory):
-openFPGALoader -f or1420SingleCore.bit
+```text
+RGB -> Grayscale -> Sobel -> Hough Transform -> Edge Detection
+```
 
-#### Building the software:
+After several weeks of development, the edge detection algorithm was partially working, but it was not fast enough to be considered real-time. To ensure that we had a stable final result, we started working in parallel on the base project: motion detection using Sobel filtering.
 
-The software is based on a makefile system. To build a program follow following steps (with as example the hello world program):
+In the end, the Hough Transform version was not selected as the main project because its performance was not sufficient. However, the corresponding files are still included in the submission for reference.
 
-- Goto the directory ```programs/helloWorld```
-- Execute ```make clean mem1420```
-- If no error occurred, you will find in the directory ```programms/helloWorld/build-release/``` the files ```hello.elf```, ```hello.cmem```, and ```hello.mem```. The file that you need to upload to your board is the ```hello.cmem```-file.
-- Upload the ```hello.cmem```-file with your favorite terminal program to your virtual prototype.
+## Summary
 
-IMPORTANT: As the or1420 does not contain a hardware-divide unit you have to compile your programm with the compile option ```-msoft-div```!
+* Algorithm
+* Modify file and How to Run
+* Result analysis and benchmarks
+* Hough Transform attempt
+
+## 1. Algorithm
+
+We reused the streaming approach from PW6 to apply the Sobel transformation directly in the video pipeline, similarly to the grayscale conversion. Motion detection is then performed using a ping-pong DMA implementation.
+
+This reduces unnecessary pixel transfers and conversions, making the processing much faster and more suitable for real-time execution.
+
+The main drawback is that motion detection is done on black and white Sobel pixels instead of grayscale values. This makes the result more sensitive to noise, so additional operations over the full pixel set are required to make the detection more stable.
+
+## 2. How find modify file and How to Run
+
+
+## 3. Result Analysis and Benchmarks
+
+## 4. Hough Transform Attempt
+
