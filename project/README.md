@@ -2,7 +2,7 @@
 
 ## Group 23
 
-* Sébastien Devaud (315144)
+* Sébastien Devaud (315 144)
 
 ## Summary
 
@@ -69,7 +69,7 @@ For the hardware part, go to `project/virtualprototype/systems/singleCore/script
 # read -sv ../../../modules/sobel/verilog/camera_optimised.v        for the main project
 # read -sv ../../../modules/camera/verilog/camera.v                 for the RGB camera
 ```
-
+`Note: The project/virtualprototype/programs/test folder contains the swap ptr version explained below. This version is not relevant for the graduation, but is kept to show that it was implemented.`
 ## 2. Algorithm
 
 ### 2.1 Sobel
