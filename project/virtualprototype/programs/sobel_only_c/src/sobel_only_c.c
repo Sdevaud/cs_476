@@ -4,17 +4,22 @@
 #include <vga.h>
 #include <stdbool.h>
 
+/*
+nrOfCycles: 139429313 110260984 61753400
+*/
+
 #define __profiling__
 
-const uint16_t largeur = 640;
-const uint16_t hauteur = 480;
+#define largeur 640
+#define hauteur 480
 const uint8_t black = 0x00;
 const uint8_t white = 0xFF;
 const uint16_t setThresholdSobel = 64;
-const uint16_t setThresholdMovement = 64;
-const uint16_t maxFramesWithoutMovement = 10;
+const uint16_t setThresholdMovement = 30;
+const uint16_t maxFramesWithoutMovement = 2;
 
-void f_init_black_screen(uint8_t blackScreen[]);
+void f_init_black_screen(volatile uint8_t screen[]);
+uint8_t blackScreen[hauteur*largeur] = {black};
 
 
 int main () {
@@ -24,7 +29,8 @@ int main () {
   volatile uint8_t sobelB[hauteur*largeur];
   volatile unsigned int *vga = (unsigned int *) 0X50000020;
   camParameters camParams;
-  uint16_t framesWithoutMovement = 0;
+  bool framesMovement = false;
+  uint16_t framesCounterNoMovement = 0;
   vga_clear();
 
 #ifdef __profiling__
@@ -81,37 +87,34 @@ int main () {
         int Gy = p3 + (p6 << 1) + p9 - p1 - (p4 << 1) - p7;
         uint16_t magnitude = (uint16_t) ((Gx < 0 ? -Gx : Gx) + (Gy < 0 ? -Gy : Gy));
 
-        if (magnitude > setThresholdSobel) {
-          magnitude = white;
-        } else {
-          magnitude = black;
-        }
+        if (magnitude > setThresholdSobel) magnitude = white;
+        else magnitude = black;
 
         if (magnitude == white && sobelB[i*largeur + j] == white) ++intersections;
         if (magnitude == white || sobelB[i*largeur + j] == white) ++unionPixel;
 
-        sobelB[i*largeur + j] = magnitude;
+        sobelB[i*largeur + j] = sobelA[i*largeur + j];
         sobelA[i*largeur + j] = magnitude;
+        
+        
       }// end for j
     } //end for i
 
-    bool movement = false;
+    if (framesMovement) ++framesCounterNoMovement;
 
-    if (unionPixel > 0) {
-      uint32_t similarity = (100 * intersections) / unionPixel;
-      movement = similarity < setThresholdMovement;
-    }
-
+    bool movement = ((int32_t)unionPixel * (100 - (int32_t)setThresholdMovement) - 100 * (int32_t)intersections) > 0;
+    // printf("inter : %u \n union : %u \n calcule : %d \n ", intersections, unionPixel, (int32_t)unionPixel * (100 - (int32_t)setThresholdMovement) - 100 * (int32_t)intersections);
     if (movement) {
-      framesWithoutMovement = 0;
-    } else {
-      if (framesWithoutMovement < maxFramesWithoutMovement) ++framesWithoutMovement;
+      framesMovement = true;
+      framesCounterNoMovement = 0;
+      vga[3] = swap_u32((uint32_t) &sobelA[0]);
     }
 
-    if (framesWithoutMovement >= maxFramesWithoutMovement) {
-      f_init_black_screen((uint8_t *) sobelA);
-    }
-    
+    if (framesCounterNoMovement > maxFramesWithoutMovement) {
+      framesCounterNoMovement = 0;
+      framesMovement = false;
+      vga[3] = swap_u32((uint32_t) &blackScreen[0]);
+    } 
 
 
 #ifdef __profiling__
@@ -125,10 +128,10 @@ int main () {
 } // end main
 
 
-void f_init_black_screen(uint8_t blackScreen[]) {
+void f_init_black_screen(volatile uint8_t screen[]) {
   for (size_t i = 0; i < hauteur; ++i) {
     for (size_t j = 0; j < largeur; ++j) {
-      blackScreen[i * largeur + j] = (uint8_t)black;
+      screen[i * largeur + j] = (uint8_t)black;
     }
   }
 }
