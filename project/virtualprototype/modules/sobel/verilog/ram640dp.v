@@ -1,3 +1,9 @@
+/*
+Date Created: 31.05.2026
+source : copy paste from ram2hdp.v
+
+*/
+
 module dualPortRam640 ( input wire [7:0]  address1,
                                          address2,
                        input wire        clock1,

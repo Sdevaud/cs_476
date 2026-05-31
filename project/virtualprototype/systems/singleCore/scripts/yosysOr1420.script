@@ -58,7 +58,11 @@ read -sv ../../../modules/support/verilog/sram_512x32.v
 read -sv ../../../modules/support/verilog/sram_1024x16_dp.v
 read -sv ../../../modules/support/verilog/sram2048x8Dp.v
 
-# uncomment and comment the part for which exercicise you want to used
+# uncomment below  in the ### ### (and comemnt the other one) :
+# read -sv ../../../modules/camera/verilog/camera_grayscale.v         for having the only_C project
+# read -sv ../../../modules/sobel/verilog/camera_optimised.v f        for having the main project
+# read -sv ../../../modules/camera/verilog/camera.v                   for having the RGB camera
+
 ##############################################################
 # read -sv ../../../modules/camera/verilog/camera.v
 # read -sv ../../../modules/camera/verilog/camera_grayscale.v
@@ -70,6 +74,7 @@ read -sv ../../../modules/sobel/verilog/white_counter.v
 read -sv ../../../modules/sobel/verilog/dice.v
 read -sv ../../../modules/sobel/verilog/complementary.v
 read -sv ../../../modules/sobel/verilog/intersection.v
+read -sv ../../../modules/sobel/verilog/threshold.v
 ##############################################################
 
 read -sv ../verilog/or1420SingleCore.v

@@ -5,6 +5,9 @@
 #include <stdbool.h>
 
 #define __profiling__
+#define __Jaccard__
+// #define __Dice__
+// #define __Percent__
 
 // ==========================================
 // DMA setup
@@ -17,6 +20,7 @@
 #define STATUS_CTRL (5 << 10)
 #define USED_BLOCK_SIZE 128
 #define USED_BURST_SIZE 31
+#define HALF_USED_BLOCK_SIZE (USED_BLOCK_SIZE >> 1)
 
 const uint32_t sizeDMA = 2 * 1024; // 2 kB
 const uint8_t nbrPixelPerPass = 4;
@@ -27,16 +31,17 @@ const uint32_t unitaryBuffer = sizeDMA / (nbrPixelPerPass * nbrBuffer); // 128
 // ==========================================
 // Camera global variables and constants
 // ==========================================
-const uint16_t largeur = 640;
-const uint16_t hauteur = 480;
+#define largeur 640u
+#define hauteur 480u
 
-const uint16_t black = 0x0000;
+const uint8_t black = 0x00;
 const uint32_t setThreshold = 0xFF << 24;
 const uint32_t delayRefresh = 20;
 
-volatile uint8_t A_SobelTab[640 * 480];
-volatile uint8_t B_SobelTab[640 * 480];
-volatile uint8_t blackScreen[640 * 480];
+// we put here the global variabl for not saturate the stack if we declare them in the main
+volatile uint8_t blackScreen[hauteur * largeur] = {black};
+volatile uint8_t A_SobelTab[largeur * hauteur];
+volatile uint8_t B_SobelTab[largeur * hauteur];
 
 // ==========================================
 // Function prototypes
@@ -45,34 +50,46 @@ void f_write_DMA(const uint32_t address, const uint32_t data);
 uint32_t f_read_DMA(const uint32_t address);
 void f_wait_DMA();
 uint32_t f_complementary(uint32_t pixelA_Frame, uint32_t pixelB_Frame);
-uint32_t f_white_counter(const volatile uint32_t *pixelA_Frame);
+uint32_t f_white_counter(uint32_t pixelA_Frame);
 uint32_t f_intersection_counter(uint32_t pixelA, uint32_t pixelB);
 void f_profiling(const uint32_t input, volatile uint32_t *output);
 void f_reset_profiling();
-void f_init_black_screen(volatile uint8_t blackScreen[]);
 void f_swap_buffer(uint32_t *buffer1, uint32_t *buffer2);
 bool f_jaccard(uint32_t unionAB, uint32_t IntersectionAB);
 bool f_dice(uint32_t totalwhitepixel, uint32_t IntersectionAB);
 void f_set_threshold();
+bool f_percent_of_change(uint32_t pixelA, uint32_t pixelB);
+void f_init_black_screen(volatile uint8_t blackScreen[]);
 
 int main() {
-// ==========================================
-// Variables for motion detection
-// ==========================================
+  // ==========================================
+  // Variables for motion detection
+  // ==========================================
   bool movement = false;
   bool frameMovement = false;
-
   uint32_t timeCounter = 0;
+
+  #ifdef __Percent__
   uint32_t whitePixelCounterA = 0;
   uint32_t whitePixelCounterB = 0;
-  uint32_t unionAB = 0;
+  #endif
+
+  #ifdef __Jaccard__
   uint32_t IntersectionAB = 0;
   uint32_t ComplementaryAB = 0;
+  uint32_t unionAB = 0;
+  #endif  
+  
+  #ifdef __Dice__ 
+  uint32_t IntersectionAB = 0;
+  uint32_t ComplementaryAB = 0;
+  uint32_t whitePixelCounterA = 0;
+  uint32_t whitePixelCounterB = 0;
+  #endif
 
-
-#ifdef __profiling__
+  #ifdef __profiling__
     volatile uint32_t cycles, stall, idle;
-#endif
+  #endif
 
 // ==========================================
 // Initialize FPGA
@@ -109,13 +126,13 @@ int main() {
     takeSingleImageBlocking((uint32_t) &A_SobelTab[0]);
 
 
-#ifdef __profiling__
+    #ifdef __profiling__
     asm volatile ("l.nios_rrr r0,r0,%[in2],0xC"::[in2]"r"(7));
-#endif
+    #endif
 
-// ==========================================
-// Initialize buffers and pointers
-// ==========================================
+    // ==========================================
+    // Initialize buffers and pointers
+    // ==========================================
     uint32_t B_Buffer1 = unitaryBuffer * 0;
     uint32_t B_Buffer2 = unitaryBuffer * 1;
     uint32_t A_Buffer1 = unitaryBuffer * 2;
@@ -128,9 +145,9 @@ int main() {
     uint32_t PtrA = (uint32_t) &A_SobelTab[0];
 
 
-// ==========================================
-// Initialize DMA for the first pass
-// ==========================================
+    // ==========================================
+    // Initialize DMA for the first pass
+    // ==========================================
     f_write_DMA(BUS_START, PtrB);
     f_write_DMA(MEMORY_START, B_Buffer1);
     f_write_DMA(STATUS_CTRL, 1);
@@ -146,55 +163,109 @@ int main() {
     PtrA += USED_BLOCK_SIZE * sizeof(uint32_t);
 
     for (uint32_t loop = 0; loop < 600; ++loop) {
-// ==========================================
-// Initialize DMA for the first pass
-// ==========================================
+      // ==========================================
+      // Initialize DMA for the first pass
+      // ==========================================
       if (loop < 599) {
         f_write_DMA(BUS_START, PtrB);
         f_write_DMA(MEMORY_START, B_Buffer1);
         f_write_DMA(STATUS_CTRL, 1);
-        f_wait_DMA();
-
-        f_write_DMA(BUS_START, PtrA);
-        f_write_DMA(MEMORY_START, A_Buffer1);
-        f_write_DMA(STATUS_CTRL, 1);
       }
 
-// ==========================================
-// Count the number of pixels 4 by 4
-// ==========================================
-      for (size_t pixel = 0; pixel < USED_BLOCK_SIZE; ++pixel) {
+      // ==========================================
+      // Count the number of pixels 4 by 4
+      // ==========================================
+      for (size_t pixel = 0; pixel < HALF_USED_BLOCK_SIZE; ++pixel) {
         pixelB = f_read_DMA(B_Buffer2 + pixel);
         pixelA = f_read_DMA(A_Buffer2 + pixel);
 
+        #ifdef __Percent__
+        whitePixelCounterA += f_white_counter(pixelA);
+        #endif
+
+        #ifdef __Jaccard__
         ComplementaryAB += f_complementary(pixelA, pixelB);
-        // whitePixelCounterA += f_white_counter(&pixelA);
         IntersectionAB += f_intersection_counter(pixelA, pixelB);
-      } // DMA Pass
+        #endif
+
+        #ifdef __Dice__
+        whitePixelCounterA += f_white_counter(pixelA);
+        IntersectionAB += f_intersection_counter(pixelA, pixelB);
+        #endif      
+      }
+
+      // we gain a little bit of cycles of writing a second for loop than introduce 
+      // an if in the previous loop
+      if (loop < 599) {
+        f_wait_DMA();
+        f_write_DMA(BUS_START, PtrA);
+        f_write_DMA(MEMORY_START, A_Buffer1);
+        f_write_DMA(STATUS_CTRL, 1);
+        }
+
+      for (size_t pixel = HALF_USED_BLOCK_SIZE; pixel < USED_BLOCK_SIZE; ++pixel) {
+        pixelB = f_read_DMA(B_Buffer2 + pixel);
+        pixelA = f_read_DMA(A_Buffer2 + pixel);
+
+        #ifdef __Percent__
+        whitePixelCounterA += f_white_counter(pixelA);
+        #endif
+
+        #ifdef __Jaccard__
+        ComplementaryAB += f_complementary(pixelA, pixelB);
+        IntersectionAB += f_intersection_counter(pixelA, pixelB);
+        #endif
+
+        #ifdef __Dice__
+        whitePixelCounterA += f_white_counter(pixelA);
+        IntersectionAB += f_intersection_counter(pixelA, pixelB);
+        #endif  
+      }
 
       f_wait_DMA();
 
-// ==========================================
-// DMA out the previous frame
-// ==========================================
+      // ==========================================
+      // DMA out the previous frame
+      // ==========================================
+      // the main botleneck ~ 1 million of cycle
+      // try to avoid it with swapp ptr on previous and actaul 
+      // but still blinking
       PtrB -= USED_BLOCK_SIZE * sizeof(uint32_t);
       f_write_DMA(BUS_START, PtrB);
       f_write_DMA(MEMORY_START, A_Buffer2);
       f_write_DMA(STATUS_CTRL, 2);
       f_wait_DMA();
 
+      // swap the buffer takes 400 000 cycles why ? (both)
       f_swap_buffer(&B_Buffer1, &B_Buffer2);
       f_swap_buffer(&A_Buffer1, &A_Buffer2);
       PtrB += 2*USED_BLOCK_SIZE * sizeof(uint32_t);
       PtrA += USED_BLOCK_SIZE * sizeof(uint32_t);
     } // one frame
 
-// ==========================================
-// Compute if there is movement
-// ==========================================
+    // ==========================================
+    // Compute if there is movement
+    // ==========================================
+    #ifdef __Percent__
+    movement = f_percent_of_change(whitePixelCounterA, whitePixelCounterB);
+    whitePixelCounterB = whitePixelCounterA;
+    whitePixelCounterA = 0;
+    #endif
+
+    #ifdef __Jaccard__
     unionAB = ComplementaryAB + IntersectionAB;
     movement = f_jaccard(unionAB, IntersectionAB);
-    // movement = f_dice(whitePixelCounterA + whitePixelCounterB, &IntersectionAB);
+    unionAB = 0;
+    IntersectionAB = 0;
+    ComplementaryAB = 0;
+    #endif    
+    
+    #ifdef __Dice__
+    movement = f_dice(whitePixelCounterA + whitePixelCounterB, IntersectionAB);
+    whitePixelCounterB = whitePixelCounterA;
+    whitePixelCounterA = 0;
+    IntersectionAB = 0;
+    #endif   
 
     if (movement) {
       frameMovement = true;
@@ -211,22 +282,12 @@ int main() {
       }
     }
 
-// ==========================================
-// Reset and update variables
-// ==========================================
-    unionAB = 0;
-    IntersectionAB = 0;
-    ComplementaryAB = 0;
-    whitePixelCounterB = whitePixelCounterA;
-    whitePixelCounterA = 0;
-
-
-#ifdef __profiling__
+    #ifdef __profiling__
     asm volatile ("l.nios_rrr %[out1],r0,%[in2],0xC":[out1]"=r"(cycles):[in2]"r"(1<<8|7<<4));
     asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],0xC":[out1]"=r"(stall):[in1]"r"(1),[in2]"r"(1<<9));
     asm volatile ("l.nios_rrr %[out1],%[in1],%[in2],0xC":[out1]"=r"(idle):[in1]"r"(2),[in2]"r"(1<<10));
     printf("nrOfCycles: %d %d %d\n", cycles, stall, idle);
-#endif
+    #endif
 
   } // end while(1)
 } // end main
@@ -261,9 +322,9 @@ uint32_t f_complementary(uint32_t pixelA_Frame, uint32_t pixelB_Frame) {
   return move;
 }
 
-uint32_t f_white_counter(const volatile uint32_t *pixelA_Frame) {
+uint32_t f_white_counter(uint32_t pixelA_Frame) {
   uint32_t whitePixel = 0;
-  asm volatile("l.nios_rrr %[out1],%[in1],r0,41" : [out1] "=r"(whitePixel) : [in1] "r"(*pixelA_Frame));
+  asm volatile("l.nios_rrr %[out1],%[in1],r0,41" : [out1] "=r"(whitePixel) : [in1] "r"(pixelA_Frame));
   return whitePixel;
 }
 
@@ -279,14 +340,6 @@ void f_profiling(const uint32_t input, volatile uint32_t *output) {
 
 void f_reset_profiling() {
   asm volatile("l.nios_rrr r0,r0,%[in2],12" ::[in2] "r"(7));
-}
-
-void f_init_black_screen(volatile uint8_t blackScreen[]) {
-  for (size_t i = 0; i < hauteur; ++i) {
-    for (size_t j = 0; j < largeur; ++j) {
-      blackScreen[i * largeur + j] = (uint8_t)black;
-    }
-  }
 }
 
 void f_swap_buffer(uint32_t *buffer1, uint32_t *buffer2) {
@@ -311,4 +364,19 @@ bool f_dice(uint32_t totalwhitepixel, uint32_t IntersectionAB) {
 void f_set_threshold() {
   asm volatile("l.nios_rrr r0,%[in1],%[in2],42" ::[in1] "r"(setThreshold), [in2] "r"(20));
   asm volatile("l.nios_rrr r0,%[in1],%[in2],43" ::[in1] "r"(setThreshold), [in2] "r"(20));
+  asm volatile("l.nios_rrr r0,%[in1],%[in2],45" ::[in1] "r"(setThreshold), [in2] "r"(10));
+}
+
+bool f_percent_of_change(uint32_t pixelA, uint32_t pixelB) {
+  volatile uint32_t move = 0u;
+  asm volatile("l.nios_rrr %[out1],%[in1],%[in2],43" : [out1] "=r"(move) : [in1] "r"(pixelA), [in2] "r"(pixelB));
+  return move == 1u;
+}
+
+void f_init_black_screen(volatile uint8_t blackScreen[]) {
+  for (size_t i = 0; i < hauteur; ++i) {
+    for (size_t j = 0; j < largeur; ++j) {
+      blackScreen[i * largeur + j] = (uint8_t)black;
+    }
+  }
 }

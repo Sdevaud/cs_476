@@ -322,10 +322,10 @@ module or1420SingleCore ( input wire         clock12MHz,
    * Here we instantiate the CPU
    *
    */
-  wire [31:0] s_cpu1CiResult, s_grayResult, s_ramDmaResult, s_comparaisonResult, s_complementaryResult, s_jaccResult, s_diceResult, s_intersectionResult;
+  wire [31:0] s_cpu1CiResult, s_grayResult, s_ramDmaResult;
   wire [31:0] s_cpu1CiDataA, s_cpu1CiDataB, s_camCiResult, s_delayResult;
   wire [7:0]  s_cpu1CiN;
-  wire        s_cpu1CiRa, s_cpu1CiRb, s_cpu1CiRc, s_cpu1CiStart, s_cpu1CiCke, s_cpu1CiDone, s_i2cCiDone, s_delayCiDone, s_complementaryCiDone, s_jaccCiDone, s_diceCiDone, s_intersectionCiDone;
+  wire        s_cpu1CiRa, s_cpu1CiRb, s_cpu1CiRc, s_cpu1CiStart, s_cpu1CiCke, s_cpu1CiDone, s_i2cCiDone, s_delayCiDone;
   wire [4:0]  s_cpu1CiA, s_cpu1CiB, s_cpu1CiC;
   wire        s_cpu1IcacheRequestBus, s_cpu1DcacheRequestBus, s_camCiDone, s_ramDmaDone;
   wire        s_cpu1IcacheBusAccessGranted, s_cpu1DcacheBusAccessGranted;
@@ -334,12 +334,15 @@ module or1420SingleCore ( input wire         clock12MHz,
   wire [3:0]  s_cpu1byteEnables;
   wire        s_cpu1DataValid;
   wire [7:0]  s_cpu1BurstSize;
-  wire        s_spm1Irq, s_grayDone, s_profileDone, s_stall, s_comparaisonDone;
+  wire        s_spm1Irq, s_grayDone, s_profileDone, s_stall;
+
+  wire s_comparaisonDone, s_complementaryCiDone, s_jaccCiDone, s_diceCiDone, s_intersectionCiDone, s_thresholdDone;
+  wire [31:0] s_comparaisonResult, s_complementaryResult, s_jaccResult, s_diceResult, s_intersectionResult, s_thresholdResult;
   
   assign s_cpu1CiDone = s_hdmiDone | s_swapByteDone | s_flashDone | s_cpuFreqDone | s_i2cCiDone | s_delayCiDone | s_camCiDone | s_grayDone | s_profileDone |
-                        s_ramDmaDone | s_comparaisonDone | s_complementaryDone | s_jaccDone | s_diceDone | s_intersectionDone;
+                        s_ramDmaDone | s_comparaisonDone | s_complementaryDone | s_jaccDone | s_diceDone | s_intersectionDone | s_thresholdDone;
   assign s_cpu1CiResult = s_hdmiResult | s_swapByteResult | s_flashResult | s_cpuFreqResult | s_i2cCiResult | s_camCiResult | s_delayResult | s_grayResult |  
-                          s_profileResult | s_ramDmaResult | s_comparaisonResult | s_complementaryResult | s_jaccResult | s_diceResult | s_intersectionResult; 
+                          s_profileResult | s_ramDmaResult | s_comparaisonResult | s_complementaryResult | s_jaccResult | s_diceResult | s_intersectionResult | s_thresholdResult;
 
   or1420Top #( .NOP_INSTRUCTION(32'h1500FFFF)) cpu1
              (.cpuClock(s_systemClock),
@@ -795,7 +798,16 @@ module or1420SingleCore ( input wire         clock12MHz,
                         .valueB(s_cpu1CiDataB),
                         .iseId(s_cpu1CiN),
                         .done(s_intersectionDone),
-                        .result(s_intersectionResult) );                          
+                        .result(s_intersectionResult) );   
+                        
+                        
+  threshold #(.customInstructionId(8'd45)) thresh
+                        (.start(s_cpu1CiStart),
+                        .valueA(s_cpu1CiDataA),
+                        .valueB(s_cpu1CiDataB),
+                        .iseId(s_cpu1CiN),
+                        .done(s_thresholdDone),
+                        .result(s_thresholdResult) );
   
   /*
    *

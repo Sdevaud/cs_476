@@ -19,7 +19,7 @@ const uint16_t setThresholdMovement = 30;
 const uint16_t maxFramesWithoutMovement = 2;
 
 void f_init_black_screen(volatile uint8_t screen[]);
-uint8_t blackScreen[hauteur*largeur] = {black};
+uint8_t blackScreen[hauteur*largeur];
 
 
 int main () {
