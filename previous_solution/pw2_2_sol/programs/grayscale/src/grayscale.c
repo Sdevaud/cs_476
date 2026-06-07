@@ -3,7 +3,7 @@
 #include <swap.h>
 #include <vga.h>
 
-#define __WITH_CI
+// #define __WITH_CI
 
 int main () {
   volatile uint16_t rgb565[640*480];

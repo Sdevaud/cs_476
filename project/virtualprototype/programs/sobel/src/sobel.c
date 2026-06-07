@@ -36,7 +36,7 @@ const uint32_t unitaryBuffer = sizeDMA / (nbrPixelPerPass * nbrBuffer); // 128
 
 const uint8_t black = 0x00;
 const uint32_t setThreshold = 0xFF << 24;
-const uint32_t delayRefresh = 20;
+const uint32_t delayRefresh = 8;
 
 // we put here the global variabl for not saturate the stack if we declare them in the main
 volatile uint8_t blackScreen[hauteur * largeur] = {black};
@@ -68,6 +68,10 @@ int main() {
   bool movement = false;
   bool frameMovement = false;
   uint32_t timeCounter = 0;
+  uint32_t ptrSobelA = (uint32_t) &A_SobelTab[0];
+  uint32_t ptrSobelB = (uint32_t) &B_SobelTab[0];
+  uint32_t ptrDisplayScreen = (uint32_t) &blackScreen[0];
+
 
   #ifdef __Percent__
   uint32_t whitePixelCounterA = 0;
@@ -123,8 +127,8 @@ int main() {
   takeSingleImageBlocking((uint32_t) &A_SobelTab[0]);
 
   while (1) {
-    takeSingleImageBlocking((uint32_t) &A_SobelTab[0]);
-
+    takeSingleImageBlocking(ptrSobelA);
+    vga[3] = swap_u32(ptrDisplayScreen);
 
     #ifdef __profiling__
     asm volatile ("l.nios_rrr r0,r0,%[in2],0xC"::[in2]"r"(7));
@@ -230,16 +234,16 @@ int main() {
       // the main botleneck ~ 1 million of cycle
       // try to avoid it with swapp ptr on previous and actaul 
       // but still blinking
-      PtrB -= USED_BLOCK_SIZE * sizeof(uint32_t);
-      f_write_DMA(BUS_START, PtrB);
-      f_write_DMA(MEMORY_START, A_Buffer2);
-      f_write_DMA(STATUS_CTRL, 2);
-      f_wait_DMA();
+      // PtrB -= USED_BLOCK_SIZE * sizeof(uint32_t);
+      // f_write_DMA(BUS_START, PtrB);
+      // f_write_DMA(MEMORY_START, A_Buffer2);
+      // f_write_DMA(STATUS_CTRL, 2);
+      // f_wait_DMA();
 
       // swap the buffer takes 400 000 cycles why ? (both)
       f_swap_buffer(&B_Buffer1, &B_Buffer2);
       f_swap_buffer(&A_Buffer1, &A_Buffer2);
-      PtrB += 2*USED_BLOCK_SIZE * sizeof(uint32_t);
+      PtrB += USED_BLOCK_SIZE * sizeof(uint32_t);
       PtrA += USED_BLOCK_SIZE * sizeof(uint32_t);
     } // one frame
 
@@ -267,9 +271,13 @@ int main() {
     IntersectionAB = 0;
     #endif   
 
+    uint32_t temp = ptrSobelA;
+    ptrSobelA = ptrSobelB;
+    ptrSobelB = temp;
+
     if (movement) {
       frameMovement = true;
-      vga[3] = swap_u32((uint32_t) &A_SobelTab[0]);
+      ptrDisplayScreen = ptrSobelA;
       timeCounter = 0;
     }
 
@@ -278,7 +286,7 @@ int main() {
       if (timeCounter > delayRefresh) {
         frameMovement = false;
         timeCounter = 0;
-        vga[3] = swap_u32((uint32_t) blackScreen);
+        ptrDisplayScreen = (uint32_t) &blackScreen[0];
       }
     }
 

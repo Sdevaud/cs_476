@@ -187,3 +187,110 @@ This project also highlighted several aspects of micro-optimization:
 * Reading from and writing to arrays is expensive and should be moved to hardware when possible.
 * Bit width and signed/unsigned handling are important for both correctness and performance.
 * Overall, real performance must be measured and pipelined experimentally; theory alone is not enough.
+
+
+
+## Filtre de Sobel
+
+On considère une fenêtre de pixels $3 \times 3$ autour du pixel courant :
+
+$$
+I =
+\begin{bmatrix}
+p_{1} & p_{2} & p_{3} \\
+p_{4} & p_{5} & p_{6} \\
+p_{7} & p_{8} & p_{9}
+\end{bmatrix}
+$$
+
+Les deux noyaux du filtre de Sobel sont :
+
+$$
+G_x =
+\begin{bmatrix}
+-1 & 0 & 1 \\
+-2 & 0 & 2 \\
+-1 & 0 & 1
+\end{bmatrix}
+$$
+
+$$
+G_y =
+\begin{bmatrix}
+1 & 2 & 1 \\
+0 & 0 & 0 \\
+-1 & -2 & -1
+\end{bmatrix}
+$$
+
+L'application des deux noyaux sur la fenêtre de pixels donne :
+
+$$
+S_x =
+\begin{bmatrix}
+-1 & 0 & 1 \\
+-2 & 0 & 2 \\
+-1 & 0 & 1
+\end{bmatrix}
+*
+\begin{bmatrix}
+p_{1} & p_{2} & p_{3} \\
+p_{4} & p_{5} & p_{6} \\
+p_{7} & p_{8} & p_{9}
+\end{bmatrix}
+$$
+
+$$
+S_y =
+\begin{bmatrix}
+1 & 2 & 1 \\
+0 & 0 & 0 \\
+-1 & -2 & -1
+\end{bmatrix}
+*
+\begin{bmatrix}
+p_{1} & p_{2} & p_{3} \\
+p_{4} & p_{5} & p_{6} \\
+p_{7} & p_{8} & p_{9}
+\end{bmatrix}
+$$
+
+En développant les multiplications, on obtient :
+
+$$
+S_x = (-1 \cdot p_1) + (0 \cdot p_2) + (1 \cdot p_3)
++ (-2 \cdot p_4) + (0 \cdot p_5) + (2 \cdot p_6)
++ (-1 \cdot p_7) + (0 \cdot p_8) + (1 \cdot p_9)
+$$
+
+Ce qui se simplifie en :
+
+$$
+S_x = -p_1 + p_3 - 2p_4 + 2p_6 - p_7 + p_9
+$$
+
+Pour le gradient vertical :
+
+$$
+S_y = (1 \cdot p_1) + (2 \cdot p_2) + (1 \cdot p_3)
++ (0 \cdot p_4) + (0 \cdot p_5) + (0 \cdot p_6)
++ (-1 \cdot p_7) + (-2 \cdot p_8) + (-1 \cdot p_9)
+$$
+
+Ce qui se simplifie en :
+
+$$
+S_y = p_1 + 2p_2 + p_3 - p_7 - 2p_8 - p_9
+$$
+
+La magnitude du gradient est ensuite calculée avec :
+
+$$
+G = \sqrt{S_x^2 + S_y^2}
+$$
+
+Une approximation souvent utilisée pour réduire les calculs est :
+
+$$
+G \approx |S_x| + |S_y|
+$$
